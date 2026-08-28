@@ -7,6 +7,7 @@ import { SharedModule } from './shared/shared.module';
 import { AuthModule } from './auth/auth.module';
 import { NotificationModule } from './notification/notification.module';
 import { ClassroomModule } from './classroom/classroom.module';
+import { StudentModule } from './student/student.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { ClassroomModule } from './classroom/classroom.module';
     AuthModule,
     NotificationModule,
     ClassroomModule,
+    StudentModule,
   ],
 })
 export class AppModule {}
