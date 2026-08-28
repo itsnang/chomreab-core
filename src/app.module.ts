@@ -6,6 +6,7 @@ import { typeOrmConfigFactory } from './typeorm.config';
 import { SharedModule } from './shared/shared.module';
 import { AuthModule } from './auth/auth.module';
 import { NotificationModule } from './notification/notification.module';
+import { ClassroomModule } from './classroom/classroom.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { NotificationModule } from './notification/notification.module';
     SharedModule,
     AuthModule,
     NotificationModule,
+    ClassroomModule,
   ],
 })
 export class AppModule {}
