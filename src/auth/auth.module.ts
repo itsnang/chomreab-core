@@ -1,0 +1,31 @@
+import { Module } from '@nestjs/common';
+import { CqrsModule } from '@nestjs/cqrs';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { JwtModule } from '@nestjs/jwt';
+import { RefreshTokenEntity } from './infrastructure/entities/refresh-token.entity';
+import { PasswordResetTokenEntity } from './infrastructure/entities/password-reset-token.entity';
+import { AuthController } from './api/controllers/auth.controller';
+import { LoginAdminHandler } from './application/commands/login-admin.handler';
+import { LoginTeacherHandler } from './application/commands/login-teacher.handler';
+import { ForgotPasswordHandler } from './application/commands/forgot-password.handler';
+import { ResetPasswordHandler } from './application/commands/reset-password.handler';
+import { RefreshTokenHandler } from './application/commands/refresh-token.handler';
+import { EmailService } from './infrastructure/services/email.service';
+
+@Module({
+  imports: [
+    CqrsModule,
+    TypeOrmModule.forFeature([RefreshTokenEntity, PasswordResetTokenEntity]),
+    JwtModule.register({}),
+  ],
+  controllers: [AuthController],
+  providers: [
+    LoginAdminHandler,
+    LoginTeacherHandler,
+    ForgotPasswordHandler,
+    ResetPasswordHandler,
+    RefreshTokenHandler,
+    EmailService,
+  ],
+})
+export class AuthModule {}
