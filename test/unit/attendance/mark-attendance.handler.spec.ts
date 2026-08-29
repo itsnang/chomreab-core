@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { EventBus } from '@nestjs/cqrs';
+import { QueryFailedError } from 'typeorm';
 import { MarkAttendanceHandler } from '../../../src/attendance/application/commands/mark-attendance.handler';
 import { MarkAttendanceCommand } from '../../../src/attendance/application/commands/mark-attendance.command';
 import {
@@ -154,6 +155,72 @@ describe('MarkAttendanceHandler', () => {
         date: '2026-08-28',
         status: AttendanceStatus.LATE,
         note: 'Traffic',
+      }),
+    );
+  });
+
+  it('handles race condition: falls back to audit+update when unique constraint fails', async () => {
+    const existingRecord: AttendanceRecordEntity = {
+      id: 'record-1',
+      studentId: 'student-1',
+      classroomId: 'class-1',
+      date: '2026-08-28',
+      status: AttendanceStatus.PRESENT,
+      note: null,
+      markedByUserId: 'teacher-1',
+      markedAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    // Simulate: first findOneBy returns null (take insert path),
+    // then save fails with unique violation (another request won the race),
+    // then second findOneBy returns the existing record that now exists
+    recordRepo.findOneBy
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(existingRecord);
+
+    const uniqueViolationError = new QueryFailedError(
+      'INSERT INTO "attendance_records" ...',
+      [],
+      new Error('duplicate key value'),
+    );
+    (uniqueViolationError as unknown as Record<string, unknown>).driverError = {
+      code: '23505',
+    };
+    recordRepo.save.mockRejectedValueOnce(uniqueViolationError);
+
+    const result = await handler.execute(
+      new MarkAttendanceCommand(
+        'student-1',
+        'class-1',
+        '2026-08-28',
+        AttendanceStatus.ABSENT,
+        'Sick',
+        'teacher-2',
+      ),
+    );
+
+    // Should have called audit save for the update
+    expect(auditRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attendanceRecordId: 'record-1',
+        previousStatus: AttendanceStatus.PRESENT,
+        newStatus: AttendanceStatus.ABSENT,
+        changedByUserId: 'teacher-2',
+      }),
+    );
+
+    // Result should reflect the updated status
+    expect(result.status).toBe(AttendanceStatus.ABSENT);
+    expect(result.note).toBe('Sick');
+    expect(result.markedByUserId).toBe('teacher-2');
+
+    // Event should still be published exactly once
+    expect(eventBus.publish).toHaveBeenCalledTimes(1);
+    expect(eventBus.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: AttendanceStatus.ABSENT,
+        note: 'Sick',
       }),
     );
   });

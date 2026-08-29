@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { CommandHandler, EventBus, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { AttendanceRecordEntity } from '../../infrastructure/entities/attendance-record.entity';
+import { QueryFailedError, Repository } from 'typeorm';
+import {
+  AttendanceRecordEntity,
+  AttendanceStatus,
+} from '../../infrastructure/entities/attendance-record.entity';
 import { AttendanceAuditLogEntity } from '../../infrastructure/entities/attendance-audit-log.entity';
 import { AttendanceMarkedEvent } from '../../domain/events/attendance-marked.event';
 import { MarkAttendanceCommand } from './mark-attendance.command';
@@ -27,35 +30,51 @@ export class MarkAttendanceHandler implements ICommandHandler<
     const { studentId, classroomId, date, status, note, markedByUserId } =
       command;
 
-    const existing = await this.recordRepository.findOneBy({ studentId, date });
+    let existing = await this.recordRepository.findOneBy({ studentId, date });
 
     let record: AttendanceRecordEntity;
     if (existing) {
-      // Re-marking the same student on the same day is an edit — keep an audit
-      // trail of who changed it and what it changed from/to.
-      await this.auditRepository.save({
-        id: crypto.randomUUID(),
-        attendanceRecordId: existing.id,
-        changedByUserId: markedByUserId,
-        previousStatus: existing.status,
-        newStatus: status,
-      });
-      existing.status = status;
-      existing.note = note;
-      existing.markedByUserId = markedByUserId;
-      record = await this.recordRepository.save(existing);
-    } else {
-      record = await this.recordRepository.save(
-        this.recordRepository.create({
-          id: crypto.randomUUID(),
-          studentId,
-          classroomId,
-          date,
-          status,
-          note,
-          markedByUserId,
-        }),
+      record = await this.updateAndAudit(
+        existing,
+        status,
+        note,
+        markedByUserId,
       );
+    } else {
+      try {
+        record = await this.recordRepository.save(
+          this.recordRepository.create({
+            id: crypto.randomUUID(),
+            studentId,
+            classroomId,
+            date,
+            status,
+            note,
+            markedByUserId,
+          }),
+        );
+      } catch (error) {
+        // Handle race condition: another request won the unique-constraint race
+        // Re-fetch the now-existing record and treat as edit
+        if (
+          error instanceof QueryFailedError &&
+          (error.driverError as { code?: string }).code === '23505'
+        ) {
+          existing = await this.recordRepository.findOneBy({ studentId, date });
+          if (existing) {
+            record = await this.updateAndAudit(
+              existing,
+              status,
+              note,
+              markedByUserId,
+            );
+          } else {
+            throw error;
+          }
+        } else {
+          throw error;
+        }
+      }
     }
 
     this.eventBus.publish(
@@ -63,5 +82,26 @@ export class MarkAttendanceHandler implements ICommandHandler<
     );
 
     return record;
+  }
+
+  private async updateAndAudit(
+    record: AttendanceRecordEntity,
+    status: AttendanceStatus,
+    note: string | null,
+    markedByUserId: string,
+  ): Promise<AttendanceRecordEntity> {
+    // Re-marking the same student on the same day is an edit — keep an audit
+    // trail of who changed it and what it changed from/to.
+    await this.auditRepository.save({
+      id: crypto.randomUUID(),
+      attendanceRecordId: record.id,
+      changedByUserId: markedByUserId,
+      previousStatus: record.status,
+      newStatus: status,
+    });
+    record.status = status;
+    record.note = note;
+    record.markedByUserId = markedByUserId;
+    return this.recordRepository.save(record);
   }
 }
