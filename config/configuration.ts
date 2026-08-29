@@ -18,6 +18,7 @@ export default () => {
     port: parseInt(process.env.PORT ?? '3000', 10),
     telegram: {
       botToken: process.env.TELEGRAM_BOT_TOKEN,
+      webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
     },
     database: {
       host: process.env.DB_HOST ?? 'localhost',
