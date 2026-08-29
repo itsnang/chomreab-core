@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ConfigService } from '@nestjs/config';
+import { timingSafeEqual } from 'crypto';
 import { ApiExcludeController } from '@nestjs/swagger';
 import {
   TELEGRAM_SERVICE,
@@ -41,10 +42,15 @@ export class TelegramWebhookController {
     @Headers('x-telegram-bot-api-secret-token')
     secretHeader: string | undefined,
   ): Promise<{ ok: true }> {
-    const expectedSecret = this.configService.get<string>(
+    const expectedSecret = this.configService.getOrThrow<string>(
       'telegram.webhookSecret',
     );
-    if (expectedSecret && secretHeader !== expectedSecret) {
+    const expectedBuffer = Buffer.from(expectedSecret);
+    const actualBuffer = Buffer.from(secretHeader ?? '');
+    const isValid =
+      expectedBuffer.length === actualBuffer.length &&
+      timingSafeEqual(expectedBuffer, actualBuffer);
+    if (!isValid) {
       throw new ForbiddenException();
     }
 
