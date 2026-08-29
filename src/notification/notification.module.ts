@@ -11,6 +11,7 @@ import { TelegramWebhookController } from './api/controllers/telegram-webhook.co
 import { SendNotificationHandler } from './application/commands/send-notification.handler';
 import { LinkParentHandler } from './application/commands/link-parent.handler';
 import { GetAttendanceStatusHandler } from './application/queries/get-attendance-status.handler';
+import { AttendanceMarkedNotificationHandler } from './application/events/attendance-marked-notification.handler';
 import { TELEGRAM_SERVICE } from './application/interfaces/telegram.service';
 import { TelegramService } from './infrastructure/services/telegram.service';
 
@@ -30,6 +31,7 @@ import { TelegramService } from './infrastructure/services/telegram.service';
     SendNotificationHandler,
     LinkParentHandler,
     GetAttendanceStatusHandler,
+    AttendanceMarkedNotificationHandler,
     { provide: TELEGRAM_SERVICE, useClass: TelegramService },
   ],
   exports: [TELEGRAM_SERVICE],
