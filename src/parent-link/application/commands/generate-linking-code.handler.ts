@@ -1,3 +1,4 @@
+import { randomInt } from 'crypto';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -13,7 +14,7 @@ const EXPIRY_DAYS = 7;
 function generateCode(): string {
   let code = '';
   for (let i = 0; i < CODE_LENGTH; i++) {
-    code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
+    code += CODE_CHARS[randomInt(0, CODE_CHARS.length)];
   }
   return code;
 }
