@@ -9,6 +9,7 @@ import { NotificationModule } from './notification/notification.module';
 import { ClassroomModule } from './classroom/classroom.module';
 import { StudentModule } from './student/student.module';
 import { ParentLinkModule } from './parent-link/parent-link.module';
+import { AttendanceModule } from './attendance/attendance.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ParentLinkModule } from './parent-link/parent-link.module';
     ClassroomModule,
     StudentModule,
     ParentLinkModule,
+    AttendanceModule,
   ],
 })
 export class AppModule {}
