@@ -72,6 +72,14 @@ describe('AttendanceMarkedNotificationHandler', () => {
       'chat-1',
       expect.stringContaining('absent'),
     );
+    expect(telegramService.sendMessage).toHaveBeenCalledWith(
+      'chat-2',
+      expect.stringContaining('Sokha'),
+    );
+    expect(telegramService.sendMessage).toHaveBeenCalledWith(
+      'chat-2',
+      expect.stringContaining('absent'),
+    );
   });
 
   it('does not let one failed send stop the others', async () => {
