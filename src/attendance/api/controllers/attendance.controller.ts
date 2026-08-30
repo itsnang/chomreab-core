@@ -8,6 +8,7 @@ import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
 import { UserRole } from '../../../shared/entities/user.entity';
 import { MarkAttendanceDto } from '../dto/mark-attendance.dto';
 import { BulkMarkAttendanceDto } from '../dto/bulk-mark-attendance.dto';
+import { GetRosterDto } from '../dto/get-roster.dto';
 import { MarkAttendanceCommand } from '../../application/commands/mark-attendance.command';
 import { BulkMarkAttendanceCommand } from '../../application/commands/bulk-mark-attendance.command';
 import { GetRosterQuery } from '../../application/queries/get-roster.query';
@@ -27,11 +28,10 @@ export class AttendanceController {
   })
   @Roles(UserRole.ADMIN, UserRole.TEACHER)
   @Get('roster')
-  roster(
-    @Query('classroom_id') classroomId: string,
-    @Query('date') date: string,
-  ) {
-    return this.queryBus.execute(new GetRosterQuery(classroomId, date));
+  roster(@Query() query: GetRosterDto) {
+    return this.queryBus.execute(
+      new GetRosterQuery(query.classroom_id, query.date),
+    );
   }
 
   @ApiOperation({
