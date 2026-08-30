@@ -3,6 +3,8 @@ import { DataSource, DefaultNamingStrategy, NamingStrategyInterface } from 'type
 import { UserEntity } from '../../src/shared/entities/user.entity';
 import { RefreshTokenEntity } from '../../src/auth/infrastructure/entities/refresh-token.entity';
 import { PasswordResetTokenEntity } from '../../src/auth/infrastructure/entities/password-reset-token.entity';
+import { ClassroomEntity } from '../../src/classroom/infrastructure/entities/classroom.entity';
+import { StudentEntity } from '../../src/student/infrastructure/entities/student.entity';
 
 const toSnake = (str: string) =>
   str
@@ -70,7 +72,7 @@ export const AppDataSource = new DataSource({
   username: process.env.DB_USER ?? 'postgres',
   password: process.env.DB_PASSWORD ?? 'postgres',
   database: process.env.DB_NAME ?? 'attendance',
-  entities: [UserEntity, RefreshTokenEntity, PasswordResetTokenEntity],
+  entities: [UserEntity, RefreshTokenEntity, PasswordResetTokenEntity, ClassroomEntity, StudentEntity],
   namingStrategy: new SnakeNamingStrategy(),
   synchronize: false,
 });
