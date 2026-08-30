@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CommandHandler, EventBus, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
@@ -8,6 +8,7 @@ import {
 } from '../../infrastructure/entities/attendance-record.entity';
 import { AttendanceAuditLogEntity } from '../../infrastructure/entities/attendance-audit-log.entity';
 import { AttendanceMarkedEvent } from '../../domain/events/attendance-marked.event';
+import { StudentEntity } from '../../../student/infrastructure/entities/student.entity';
 import { MarkAttendanceCommand } from './mark-attendance.command';
 
 @Injectable()
@@ -21,14 +22,25 @@ export class MarkAttendanceHandler implements ICommandHandler<
     private readonly recordRepository: Repository<AttendanceRecordEntity>,
     @InjectRepository(AttendanceAuditLogEntity)
     private readonly auditRepository: Repository<AttendanceAuditLogEntity>,
+    @InjectRepository(StudentEntity)
+    private readonly studentRepository: Repository<StudentEntity>,
     private readonly eventBus: EventBus,
   ) {}
 
   async execute(
     command: MarkAttendanceCommand,
   ): Promise<AttendanceRecordEntity> {
-    const { studentId, classroomId, date, status, note, markedByUserId } =
-      command;
+    const { studentId, date, status, note, markedByUserId } = command;
+
+    const student = await this.studentRepository.findOneBy({ id: studentId });
+    if (!student) {
+      throw new NotFoundException('Student not found');
+    }
+    // The submitted classroom_id is not trusted — the student's actual
+    // classroom is the source of truth, so a stale/incorrect classroom_id
+    // from the caller can't create a record that silently never appears on
+    // any roster.
+    const classroomId = student.classroomId;
 
     let existing = await this.recordRepository.findOneBy({ studentId, date });
 

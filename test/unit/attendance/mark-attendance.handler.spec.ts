@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { EventBus } from '@nestjs/cqrs';
+import { NotFoundException } from '@nestjs/common';
 import { QueryFailedError } from 'typeorm';
 import { MarkAttendanceHandler } from '../../../src/attendance/application/commands/mark-attendance.handler';
 import { MarkAttendanceCommand } from '../../../src/attendance/application/commands/mark-attendance.command';
@@ -9,12 +10,14 @@ import {
   AttendanceStatus,
 } from '../../../src/attendance/infrastructure/entities/attendance-record.entity';
 import { AttendanceAuditLogEntity } from '../../../src/attendance/infrastructure/entities/attendance-audit-log.entity';
+import { StudentEntity } from '../../../src/student/infrastructure/entities/student.entity';
 import { AttendanceMarkedEvent } from '../../../src/attendance/domain/events/attendance-marked.event';
 
 describe('MarkAttendanceHandler', () => {
   let handler: MarkAttendanceHandler;
   let recordRepo: { findOneBy: jest.Mock; create: jest.Mock; save: jest.Mock };
   let auditRepo: { save: jest.Mock };
+  let studentRepo: { findOneBy: jest.Mock };
   let eventBus: { publish: jest.Mock };
 
   beforeEach(async () => {
@@ -26,6 +29,11 @@ describe('MarkAttendanceHandler', () => {
       save: jest.fn((v: AttendanceRecordEntity) => Promise.resolve(v)),
     };
     auditRepo = { save: jest.fn().mockResolvedValue(undefined) };
+    studentRepo = {
+      findOneBy: jest
+        .fn()
+        .mockResolvedValue({ id: 'student-1', classroomId: 'class-1' }),
+    };
     eventBus = { publish: jest.fn() };
 
     const module = await Test.createTestingModule({
@@ -38,6 +46,10 @@ describe('MarkAttendanceHandler', () => {
         {
           provide: getRepositoryToken(AttendanceAuditLogEntity),
           useValue: auditRepo,
+        },
+        {
+          provide: getRepositoryToken(StudentEntity),
+          useValue: studentRepo,
         },
         { provide: EventBus, useValue: eventBus },
       ],
@@ -222,6 +234,51 @@ describe('MarkAttendanceHandler', () => {
         status: AttendanceStatus.ABSENT,
         note: 'Sick',
       }),
+    );
+  });
+
+  it('throws NotFoundException and writes nothing when the student does not exist', async () => {
+    studentRepo.findOneBy.mockResolvedValue(null);
+
+    await expect(
+      handler.execute(
+        new MarkAttendanceCommand(
+          'missing-student',
+          'class-1',
+          '2026-08-28',
+          AttendanceStatus.PRESENT,
+          null,
+          'teacher-1',
+        ),
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(recordRepo.findOneBy).not.toHaveBeenCalled();
+    expect(recordRepo.save).not.toHaveBeenCalled();
+    expect(eventBus.publish).not.toHaveBeenCalled();
+  });
+
+  it("uses the student's real classroomId, ignoring a mismatched command classroomId", async () => {
+    studentRepo.findOneBy.mockResolvedValue({
+      id: 'student-1',
+      classroomId: 'actual-class',
+    });
+    recordRepo.findOneBy.mockResolvedValue(null);
+
+    const result = await handler.execute(
+      new MarkAttendanceCommand(
+        'student-1',
+        'spoofed-class',
+        '2026-08-28',
+        AttendanceStatus.PRESENT,
+        null,
+        'teacher-1',
+      ),
+    );
+
+    expect(result.classroomId).toBe('actual-class');
+    expect(eventBus.publish).toHaveBeenCalledWith(
+      expect.objectContaining({ classroomId: 'actual-class' }),
     );
   });
 });
