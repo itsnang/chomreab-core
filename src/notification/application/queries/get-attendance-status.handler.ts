@@ -5,6 +5,8 @@ import { Repository } from 'typeorm';
 import { ParentLinkEntity } from '../../../parent-link/infrastructure/entities/parent-link.entity';
 import { StudentEntity } from '../../../student/infrastructure/entities/student.entity';
 import { AttendanceRecordEntity } from '../../../attendance/infrastructure/entities/attendance-record.entity';
+import { escapeTelegramHtml } from '../../../shared/utils/telegram-escape.util';
+import { getSchoolToday } from '../../../shared/utils/school-date.util';
 import { GetAttendanceStatusQuery } from './get-attendance-status.query';
 
 @Injectable()
@@ -30,7 +32,7 @@ export class GetAttendanceStatusHandler implements IQueryHandler<
       return "You haven't linked a child yet. Send /link <code> first.";
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getSchoolToday();
     const lines: string[] = [];
     for (const link of links) {
       const student = await this.studentRepository.findOneBy({
@@ -42,7 +44,7 @@ export class GetAttendanceStatusHandler implements IQueryHandler<
         date: today,
       });
       lines.push(
-        `${student.name}: ${record ? record.status : 'not marked yet'}`,
+        `${escapeTelegramHtml(student.name)}: ${record ? record.status : 'not marked yet'}`,
       );
     }
     return lines.join('\n');
