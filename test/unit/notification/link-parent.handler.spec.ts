@@ -10,7 +10,7 @@ import { TELEGRAM_SERVICE } from '../../../src/notification/application/interfac
 describe('LinkParentHandler', () => {
   let handler: LinkParentHandler;
   let linkingCodeRepo: { findOneBy: jest.Mock; save: jest.Mock };
-  let parentLinkRepo: { save: jest.Mock };
+  let parentLinkRepo: { findOneBy: jest.Mock; save: jest.Mock };
   let studentRepo: { findOneBy: jest.Mock };
   let telegramService: { sendMessage: jest.Mock };
 
@@ -19,7 +19,10 @@ describe('LinkParentHandler', () => {
       findOneBy: jest.fn(),
       save: jest.fn().mockResolvedValue(undefined),
     };
-    parentLinkRepo = { save: jest.fn().mockResolvedValue(undefined) };
+    parentLinkRepo = {
+      findOneBy: jest.fn().mockResolvedValue(null),
+      save: jest.fn().mockResolvedValue(undefined),
+    };
     studentRepo = { findOneBy: jest.fn() };
     telegramService = { sendMessage: jest.fn().mockResolvedValue(undefined) };
 
@@ -98,6 +101,33 @@ describe('LinkParentHandler', () => {
     expect(telegramService.sendMessage).toHaveBeenCalledWith(
       'chat-1',
       expect.stringContaining('Sokha'),
+    );
+  });
+
+  it('does not create a duplicate ParentLinkEntity when one already exists for the student+chat, but still marks the code used', async () => {
+    const linkingCode = {
+      code: 'WXYZ9876',
+      studentId: 'student-1',
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 100000),
+    };
+    linkingCodeRepo.findOneBy.mockResolvedValue(linkingCode);
+    studentRepo.findOneBy.mockResolvedValue({ id: 'student-1', name: 'Sokha' });
+    parentLinkRepo.findOneBy.mockResolvedValue({
+      id: 'existing-link',
+      studentId: 'student-1',
+      telegramChatId: 'chat-1',
+    });
+
+    await handler.execute(new LinkParentCommand('chat-1', 'WXYZ9876'));
+
+    expect(parentLinkRepo.save).not.toHaveBeenCalled();
+    expect(linkingCodeRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ usedAt: expect.any(Date) as Date }),
+    );
+    expect(telegramService.sendMessage).toHaveBeenCalledWith(
+      'chat-1',
+      expect.stringContaining('already linked'),
     );
   });
 });

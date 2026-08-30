@@ -1,6 +1,13 @@
-import { Column, CreateDateColumn, Entity, PrimaryColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryColumn,
+} from 'typeorm';
 
 @Entity('parent_links')
+@Index(['studentId', 'telegramChatId'], { unique: true })
 export class ParentLinkEntity {
   @PrimaryColumn('uuid')
   id: string;

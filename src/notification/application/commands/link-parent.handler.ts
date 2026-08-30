@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { LinkingCodeEntity } from '../../../parent-link/infrastructure/entities/linking-code.entity';
 import { ParentLinkEntity } from '../../../parent-link/infrastructure/entities/parent-link.entity';
 import { StudentEntity } from '../../../student/infrastructure/entities/student.entity';
+import { escapeTelegramHtml } from '../../../shared/utils/telegram-escape.util';
 import {
   TELEGRAM_SERVICE,
   type ITelegramService,
@@ -56,17 +57,28 @@ export class LinkParentHandler implements ICommandHandler<
       return;
     }
 
-    await this.parentLinkRepository.save({
-      id: crypto.randomUUID(),
+    const existingLink = await this.parentLinkRepository.findOneBy({
       studentId: student.id,
       telegramChatId,
     });
+
+    if (!existingLink) {
+      await this.parentLinkRepository.save({
+        id: crypto.randomUUID(),
+        studentId: student.id,
+        telegramChatId,
+      });
+    }
+
     linkingCode.usedAt = new Date();
     await this.linkingCodeRepository.save(linkingCode);
 
+    const safeName = escapeTelegramHtml(student.name);
     await this.telegram.sendMessage(
       telegramChatId,
-      `You're now linked to ${student.name}.`,
+      existingLink
+        ? `You're already linked to ${safeName}.`
+        : `You're now linked to ${safeName}.`,
     );
   }
 }
