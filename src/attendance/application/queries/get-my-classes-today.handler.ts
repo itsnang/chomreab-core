@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { ClassroomEntity } from '../../../classroom/infrastructure/entities/classroom.entity';
 import { StudentEntity } from '../../../student/infrastructure/entities/student.entity';
 import { AttendanceRecordEntity } from '../../infrastructure/entities/attendance-record.entity';
@@ -37,9 +37,14 @@ export class GetMyClassesTodayHandler implements IQueryHandler<
     });
     if (classrooms.length === 0) return [];
 
+    const classroomIds = classrooms.map((c) => c.id);
     const [students, records] = await Promise.all([
-      this.studentRepository.find(),
-      this.recordRepository.find({ where: { date: query.date } }),
+      this.studentRepository.find({
+        where: { classroomId: In(classroomIds) },
+      }),
+      this.recordRepository.find({
+        where: { date: query.date, classroomId: In(classroomIds) },
+      }),
     ]);
     const markedStudentIds = new Set(records.map((r) => r.studentId));
 
