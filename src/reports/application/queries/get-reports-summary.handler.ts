@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Between, Repository } from 'typeorm';
 import { StudentEntity } from '../../../student/infrastructure/entities/student.entity';
 import { ClassroomEntity } from '../../../classroom/infrastructure/entities/classroom.entity';
 import {
@@ -65,16 +65,13 @@ export class GetReportsSummaryHandler implements IQueryHandler<
     const { today } = query;
     const start = windowStart(today);
 
-    const [students, classrooms, allRecords] = await Promise.all([
+    const [students, classrooms, windowRecords] = await Promise.all([
       this.studentRepository.find(),
       this.classroomRepository.find(),
-      this.recordRepository.find(),
+      this.recordRepository.find({ where: { date: Between(start, today) } }),
     ]);
 
     const classroomById = new Map(classrooms.map((c) => [c.id, c]));
-    const windowRecords = allRecords.filter(
-      (r) => r.date >= start && r.date <= today,
-    );
 
     const studentRows: StudentReportRow[] = students.map((s) => {
       const records = windowRecords.filter((r) => r.studentId === s.id);
@@ -113,7 +110,7 @@ export class GetReportsSummaryHandler implements IQueryHandler<
           );
     const chronicCount = studentRows.filter((r) => r.chronic).length;
 
-    const todayRecords = allRecords.filter((r) => r.date === today);
+    const todayRecords = windowRecords.filter((r) => r.date === today);
     const dailySummary: ClassDailySummary[] = classrooms.map((c) => {
       const roster = students.filter((s) => s.classroomId === c.id);
       const records = todayRecords.filter((r) => r.classroomId === c.id);

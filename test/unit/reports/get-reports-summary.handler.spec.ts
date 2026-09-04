@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { Between } from 'typeorm';
 import { GetReportsSummaryHandler } from '../../../src/reports/application/queries/get-reports-summary.handler';
 import { GetReportsSummaryQuery } from '../../../src/reports/application/queries/get-reports-summary.query';
 import { StudentEntity } from '../../../src/student/infrastructure/entities/student.entity';
@@ -92,25 +93,25 @@ describe('GetReportsSummaryHandler', () => {
     expect(result.overallRatePct).toBe(100);
   });
 
-  it("excludes records outside the 20-day window from a student's counts", async () => {
+  it('scopes the attendance query to the 20-day window at the DB level', async () => {
     studentRepo.find.mockResolvedValue([
       { id: 's1', name: 'Sokha', classroomId: 'c1' },
     ]);
     classroomRepo.find.mockResolvedValue([
       { id: 'c1', name: 'Grade 3A', teacherId: null },
     ]);
-    recordRepo.find.mockResolvedValue([
-      {
-        studentId: 's1',
-        classroomId: 'c1',
-        date: '2026-07-01',
-        status: AttendanceStatus.ABSENT,
-      },
-    ]);
+    // A real query scoped to the window would never return a record dated
+    // outside it (e.g. 2026-07-01), so the mock reflects that by resolving
+    // with no records for this window.
+    recordRepo.find.mockResolvedValue([]);
 
     const result = await handler.execute(
       new GetReportsSummaryQuery('2026-08-28'),
     );
+
+    expect(recordRepo.find).toHaveBeenCalledWith({
+      where: { date: Between('2026-08-09', '2026-08-28') },
+    });
     expect(result.studentRows[0]).toMatchObject({ absent: 0, chronic: false });
   });
 

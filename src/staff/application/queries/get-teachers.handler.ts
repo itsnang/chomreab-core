@@ -26,7 +26,7 @@ export class GetTeachersHandler implements IQueryHandler<
     private readonly classroomRepository: Repository<ClassroomEntity>,
   ) {}
 
-  async execute(): Promise<TeacherWithClassrooms[]> {
+  async execute(_query: GetTeachersQuery): Promise<TeacherWithClassrooms[]> {
     const [teachers, classrooms] = await Promise.all([
       this.userRepository.find({
         where: { role: UserRole.TEACHER },

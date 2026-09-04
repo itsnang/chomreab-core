@@ -9,6 +9,7 @@ import { GetTeachersHandler } from '../../../src/staff/application/queries/get-t
 import { GetTeachersQuery } from '../../../src/staff/application/queries/get-teachers.query';
 import { UserEntity, UserRole } from '../../../src/shared/entities/user.entity';
 import { ClassroomEntity } from '../../../src/classroom/infrastructure/entities/classroom.entity';
+import { RefreshTokenEntity } from '../../../src/auth/infrastructure/entities/refresh-token.entity';
 
 describe('Staff command handlers', () => {
   let createHandler: CreateTeacherHandler;
@@ -19,6 +20,8 @@ describe('Staff command handlers', () => {
     findOneBy: jest.Mock;
     delete: jest.Mock;
   };
+  let refreshTokenRepo: { delete: jest.Mock };
+  let classroomRepo: { update: jest.Mock };
 
   beforeEach(async () => {
     repo = {
@@ -27,12 +30,22 @@ describe('Staff command handlers', () => {
       findOneBy: jest.fn(),
       delete: jest.fn(),
     };
+    refreshTokenRepo = { delete: jest.fn().mockResolvedValue({ affected: 0 }) };
+    classroomRepo = { update: jest.fn().mockResolvedValue({ affected: 0 }) };
 
     const module = await Test.createTestingModule({
       providers: [
         CreateTeacherHandler,
         DeleteTeacherHandler,
         { provide: getRepositoryToken(UserEntity), useValue: repo },
+        {
+          provide: getRepositoryToken(RefreshTokenEntity),
+          useValue: refreshTokenRepo,
+        },
+        {
+          provide: getRepositoryToken(ClassroomEntity),
+          useValue: classroomRepo,
+        },
       ],
     }).compile();
 
@@ -61,7 +74,7 @@ describe('Staff command handlers', () => {
     ).rejects.toThrow(ConflictException);
   });
 
-  it('deletes a teacher', async () => {
+  it('deletes a teacher and revokes their access', async () => {
     repo.delete.mockResolvedValue({ affected: 1 });
     await expect(
       deleteHandler.execute(new DeleteTeacherCommand('1')),
@@ -70,13 +83,20 @@ describe('Staff command handlers', () => {
       id: '1',
       role: UserRole.TEACHER,
     });
+    expect(refreshTokenRepo.delete).toHaveBeenCalledWith({ userId: '1' });
+    expect(classroomRepo.update).toHaveBeenCalledWith(
+      { teacherId: '1' },
+      { teacherId: null },
+    );
   });
 
-  it('throws NotFoundException deleting a missing teacher', async () => {
+  it('throws NotFoundException deleting a missing teacher and does not touch other tables', async () => {
     repo.delete.mockResolvedValue({ affected: 0 });
     await expect(
       deleteHandler.execute(new DeleteTeacherCommand('missing')),
     ).rejects.toThrow(NotFoundException);
+    expect(refreshTokenRepo.delete).not.toHaveBeenCalled();
+    expect(classroomRepo.update).not.toHaveBeenCalled();
   });
 });
 

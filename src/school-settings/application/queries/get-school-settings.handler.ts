@@ -20,7 +20,7 @@ export class GetSchoolSettingsHandler implements IQueryHandler<
     private readonly repository: Repository<SchoolSettingsEntity>,
   ) {}
 
-  async execute(): Promise<SchoolSettingsEntity> {
+  async execute(_query: GetSchoolSettingsQuery): Promise<SchoolSettingsEntity> {
     const existing = await this.repository.findOneBy({
       id: SCHOOL_SETTINGS_ID,
     });
