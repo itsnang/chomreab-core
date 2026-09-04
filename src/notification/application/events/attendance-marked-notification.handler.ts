@@ -66,14 +66,14 @@ export class AttendanceMarkedNotificationHandler implements IEventHandler<Attend
   ): Promise<string> {
     if (event.status === 'absent') {
       // Escape the admin-authored template's own literal text once, then
-      // substitute the already-escaped student name into its placeholder —
-      // never re-escape studentName, or entities like `&amp;` double-encode.
+      // substitute the already-escaped student name and note into their placeholders —
+      // never re-escape studentName or note, or entities like `&amp;` double-encode.
       const template = await this.schoolSettings.getAbsenceTemplate();
       const escapedTemplate = escapeTelegramHtml(template);
-      return escapedTemplate.replace(
-        /\{\{\s*student_name\s*\}\}/g,
-        studentName,
-      );
+      const escapedNote = event.note ? escapeTelegramHtml(event.note) : '';
+      return escapedTemplate
+        .replace(/\{\{\s*student_name\s*\}\}/g, studentName)
+        .replace(/\{\{\s*note\s*\}\}/g, escapedNote);
     }
     const label = STATUS_LABEL[event.status] ?? event.status;
     const noteText = event.note

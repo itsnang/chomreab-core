@@ -130,4 +130,36 @@ describe('School settings', () => {
     const template = await service.getAbsenceTemplate();
     expect(template).toContain('{{student_name}}');
   });
+
+  it('preserves the existing bot token when an empty string is provided in the update', async () => {
+    repo.findOneBy.mockResolvedValue({
+      id: SCHOOL_SETTINGS_ID,
+      telegramBotToken: 'existing-token',
+    });
+    const result = await updateHandler.execute(
+      new UpdateSchoolSettingsCommand(
+        'New School',
+        20,
+        'Absent: {{student_name}}',
+        '',
+      ),
+    );
+    expect(result.telegramBotToken).toBe('existing-token');
+  });
+
+  it('preserves the existing bot token when a whitespace-only string is provided in the update', async () => {
+    repo.findOneBy.mockResolvedValue({
+      id: SCHOOL_SETTINGS_ID,
+      telegramBotToken: 'existing-token',
+    });
+    const result = await updateHandler.execute(
+      new UpdateSchoolSettingsCommand(
+        'New School',
+        20,
+        'Absent: {{student_name}}',
+        '  \t  ',
+      ),
+    );
+    expect(result.telegramBotToken).toBe('existing-token');
+  });
 });
