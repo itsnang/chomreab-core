@@ -14,6 +14,7 @@ import { GetAttendanceStatusHandler } from './application/queries/get-attendance
 import { AttendanceMarkedNotificationHandler } from './application/events/attendance-marked-notification.handler';
 import { TELEGRAM_SERVICE } from './application/interfaces/telegram.service';
 import { TelegramService } from './infrastructure/services/telegram.service';
+import { SchoolSettingsModule } from '../school-settings/school-settings.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { TelegramService } from './infrastructure/services/telegram.service';
       ParentLinkEntity,
       AttendanceRecordEntity,
     ]),
+    SchoolSettingsModule,
   ],
   controllers: [NotificationController, TelegramWebhookController],
   providers: [

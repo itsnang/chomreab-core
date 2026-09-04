@@ -5,6 +5,7 @@ import { AttendanceMarkedEvent } from '../../../src/attendance/domain/events/att
 import { ParentLinkEntity } from '../../../src/parent-link/infrastructure/entities/parent-link.entity';
 import { StudentEntity } from '../../../src/student/infrastructure/entities/student.entity';
 import { TELEGRAM_SERVICE } from '../../../src/notification/application/interfaces/telegram.service';
+import { SchoolSettingsService } from '../../../src/school-settings/application/services/school-settings.service';
 
 describe('AttendanceMarkedNotificationHandler', () => {
   let handler: AttendanceMarkedNotificationHandler;
@@ -26,6 +27,15 @@ describe('AttendanceMarkedNotificationHandler', () => {
         },
         { provide: getRepositoryToken(StudentEntity), useValue: studentRepo },
         { provide: TELEGRAM_SERVICE, useValue: telegramService },
+        {
+          provide: SchoolSettingsService,
+          useValue: {
+            getEffectiveBotToken: jest.fn().mockResolvedValue('token'),
+            getAbsenceTemplate: jest
+              .fn()
+              .mockResolvedValue('{{student_name}} was absent'),
+          },
+        },
       ],
     }).compile();
 
