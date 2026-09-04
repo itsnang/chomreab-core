@@ -9,9 +9,12 @@ import { UserRole } from '../../../shared/entities/user.entity';
 import { MarkAttendanceDto } from '../dto/mark-attendance.dto';
 import { BulkMarkAttendanceDto } from '../dto/bulk-mark-attendance.dto';
 import { GetRosterDto } from '../dto/get-roster.dto';
+import { GetMyClassesDto } from '../dto/get-my-classes.dto';
 import { MarkAttendanceCommand } from '../../application/commands/mark-attendance.command';
 import { BulkMarkAttendanceCommand } from '../../application/commands/bulk-mark-attendance.command';
 import { GetRosterQuery } from '../../application/queries/get-roster.query';
+import { GetMyClassesTodayQuery } from '../../application/queries/get-my-classes-today.query';
+import { GetAuditLogQuery } from '../../application/queries/get-audit-log.query';
 
 @ApiTags('attendance')
 @ApiBearerAuth()
@@ -67,6 +70,28 @@ export class AttendanceController {
         dto.status,
         userId,
       ),
+    );
+  }
+
+  @ApiOperation({
+    summary: "Get the current teacher's classrooms with today's unmarked count",
+  })
+  @Roles(UserRole.TEACHER)
+  @Get('my-classes')
+  myClasses(@CurrentUser() userId: string, @Query() query: GetMyClassesDto) {
+    return this.queryBus.execute(
+      new GetMyClassesTodayQuery(userId, query.date),
+    );
+  }
+
+  @ApiOperation({
+    summary: "Get today's attendance edit history for a classroom",
+  })
+  @Roles(UserRole.ADMIN, UserRole.TEACHER)
+  @Get('audit-log')
+  auditLog(@Query() query: GetRosterDto) {
+    return this.queryBus.execute(
+      new GetAuditLogQuery(query.classroom_id, query.date),
     );
   }
 }
