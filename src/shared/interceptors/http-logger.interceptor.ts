@@ -27,6 +27,12 @@ const SENSITIVE_FIELDS = new Set<string>([
   'authorization',
   'otp',
   'pin',
+  'telegram_bot_token',
+  // Both lookups below (sanitizeUrl/sanitizeBody) compare via
+  // `key.toLowerCase()`, so the camelCase field `telegramBotToken` (as
+  // returned pre-transform by the school-settings entity) folds to this
+  // all-lowercase, no-separator form rather than to 'telegramBotToken'.
+  'telegrambottoken',
 ]);
 
 function sanitizeUrl(url: string): string {

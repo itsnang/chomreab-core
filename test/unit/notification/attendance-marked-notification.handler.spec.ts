@@ -5,6 +5,7 @@ import { AttendanceMarkedEvent } from '../../../src/attendance/domain/events/att
 import { ParentLinkEntity } from '../../../src/parent-link/infrastructure/entities/parent-link.entity';
 import { StudentEntity } from '../../../src/student/infrastructure/entities/student.entity';
 import { TELEGRAM_SERVICE } from '../../../src/notification/application/interfaces/telegram.service';
+import { SchoolSettingsService } from '../../../src/school-settings/application/services/school-settings.service';
 
 describe('AttendanceMarkedNotificationHandler', () => {
   let handler: AttendanceMarkedNotificationHandler;
@@ -26,6 +27,15 @@ describe('AttendanceMarkedNotificationHandler', () => {
         },
         { provide: getRepositoryToken(StudentEntity), useValue: studentRepo },
         { provide: TELEGRAM_SERVICE, useValue: telegramService },
+        {
+          provide: SchoolSettingsService,
+          useValue: {
+            getEffectiveBotToken: jest.fn().mockResolvedValue('token'),
+            getAbsenceTemplate: jest
+              .fn()
+              .mockResolvedValue('{{student_name}} was absent'),
+          },
+        },
       ],
     }).compile();
 
@@ -103,5 +113,97 @@ describe('AttendanceMarkedNotificationHandler', () => {
     );
 
     expect(telegramService.sendMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('substitutes {{note}} placeholder when note is present', async () => {
+    const schoolSettings = {
+      getEffectiveBotToken: jest.fn().mockResolvedValue('token'),
+      getAbsenceTemplate: jest
+        .fn()
+        .mockResolvedValue('{{student_name}} was absent. Reason: {{note}}'),
+    };
+
+    const testModule = await Test.createTestingModule({
+      providers: [
+        AttendanceMarkedNotificationHandler,
+        {
+          provide: getRepositoryToken(ParentLinkEntity),
+          useValue: parentLinkRepo,
+        },
+        {
+          provide: getRepositoryToken(StudentEntity),
+          useValue: studentRepo,
+        },
+        { provide: TELEGRAM_SERVICE, useValue: telegramService },
+        { provide: SchoolSettingsService, useValue: schoolSettings },
+      ],
+    }).compile();
+
+    const testHandler = testModule.get(AttendanceMarkedNotificationHandler);
+    parentLinkRepo.find.mockResolvedValue([{ telegramChatId: 'chat-1' }]);
+    studentRepo.findOneBy.mockResolvedValue({ id: 'student-1', name: 'Sokha' });
+
+    await testHandler.handle(
+      new AttendanceMarkedEvent(
+        'student-1',
+        'class-1',
+        '2026-08-28',
+        'absent',
+        'Doctor appointment',
+      ),
+    );
+
+    expect(telegramService.sendMessage).toHaveBeenCalledWith(
+      'chat-1',
+      expect.stringContaining('Sokha'),
+    );
+    expect(telegramService.sendMessage).toHaveBeenCalledWith(
+      'chat-1',
+      expect.stringContaining('Doctor appointment'),
+    );
+  });
+
+  it('renders {{note}} as empty string when no note is provided', async () => {
+    const schoolSettings = {
+      getEffectiveBotToken: jest.fn().mockResolvedValue('token'),
+      getAbsenceTemplate: jest
+        .fn()
+        .mockResolvedValue('{{student_name}} was absent{{note}}'),
+    };
+
+    const testModule = await Test.createTestingModule({
+      providers: [
+        AttendanceMarkedNotificationHandler,
+        {
+          provide: getRepositoryToken(ParentLinkEntity),
+          useValue: parentLinkRepo,
+        },
+        {
+          provide: getRepositoryToken(StudentEntity),
+          useValue: studentRepo,
+        },
+        { provide: TELEGRAM_SERVICE, useValue: telegramService },
+        { provide: SchoolSettingsService, useValue: schoolSettings },
+      ],
+    }).compile();
+
+    const testHandler = testModule.get(AttendanceMarkedNotificationHandler);
+    parentLinkRepo.find.mockResolvedValue([{ telegramChatId: 'chat-1' }]);
+    studentRepo.findOneBy.mockResolvedValue({ id: 'student-1', name: 'Sokha' });
+
+    await testHandler.handle(
+      new AttendanceMarkedEvent(
+        'student-1',
+        'class-1',
+        '2026-08-28',
+        'absent',
+        null,
+      ),
+    );
+
+    expect(telegramService.sendMessage).toHaveBeenCalledWith(
+      'chat-1',
+      'Sokha was absent',
+    );
   });
 });

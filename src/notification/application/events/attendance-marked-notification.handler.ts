@@ -6,6 +6,7 @@ import { AttendanceMarkedEvent } from '../../../attendance/domain/events/attenda
 import { ParentLinkEntity } from '../../../parent-link/infrastructure/entities/parent-link.entity';
 import { StudentEntity } from '../../../student/infrastructure/entities/student.entity';
 import { escapeTelegramHtml } from '../../../shared/utils/telegram-escape.util';
+import { SchoolSettingsService } from '../../../school-settings/application/services/school-settings.service';
 import {
   TELEGRAM_SERVICE,
   type ITelegramService,
@@ -30,6 +31,7 @@ export class AttendanceMarkedNotificationHandler implements IEventHandler<Attend
     @InjectRepository(StudentEntity)
     private readonly studentRepository: Repository<StudentEntity>,
     @Inject(TELEGRAM_SERVICE) private readonly telegram: ITelegramService,
+    private readonly schoolSettings: SchoolSettingsService,
   ) {}
 
   async handle(event: AttendanceMarkedEvent): Promise<void> {
@@ -41,12 +43,8 @@ export class AttendanceMarkedNotificationHandler implements IEventHandler<Attend
     const student = await this.studentRepository.findOneBy({
       id: event.studentId,
     });
-    const label = STATUS_LABEL[event.status] ?? event.status;
     const studentName = escapeTelegramHtml(student?.name ?? 'Your child');
-    const noteText = event.note
-      ? `\nNote: ${escapeTelegramHtml(event.note)}`
-      : '';
-    const text = `${studentName} was marked ${label} on ${event.date}.${noteText}`;
+    const text = await this.buildMessage(event, studentName);
 
     for (const link of links) {
       try {
@@ -60,5 +58,27 @@ export class AttendanceMarkedNotificationHandler implements IEventHandler<Attend
         );
       }
     }
+  }
+
+  private async buildMessage(
+    event: AttendanceMarkedEvent,
+    studentName: string,
+  ): Promise<string> {
+    if (event.status === 'absent') {
+      // Escape the admin-authored template's own literal text once, then
+      // substitute the already-escaped student name and note into their placeholders —
+      // never re-escape studentName or note, or entities like `&amp;` double-encode.
+      const template = await this.schoolSettings.getAbsenceTemplate();
+      const escapedTemplate = escapeTelegramHtml(template);
+      const escapedNote = event.note ? escapeTelegramHtml(event.note) : '';
+      return escapedTemplate
+        .replace(/\{\{\s*student_name\s*\}\}/g, studentName)
+        .replace(/\{\{\s*note\s*\}\}/g, escapedNote);
+    }
+    const label = STATUS_LABEL[event.status] ?? event.status;
+    const noteText = event.note
+      ? `\nNote: ${escapeTelegramHtml(event.note)}`
+      : '';
+    return `${studentName} was marked ${label} on ${event.date}.${noteText}`;
   }
 }
