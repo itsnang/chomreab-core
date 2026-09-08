@@ -45,6 +45,10 @@ export class CreateTeacherHandler implements ICommandHandler<
       email: command.email,
       passwordHash,
       role: UserRole.TEACHER,
+      // The admin reads this password aloud or pastes it to the teacher, so it
+      // has been seen by someone other than its owner — the teacher has to
+      // replace it before they can use the app.
+      mustChangePassword: true,
     });
     await this.userRepository.save(user);
 
