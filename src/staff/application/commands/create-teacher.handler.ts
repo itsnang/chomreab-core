@@ -1,10 +1,10 @@
-import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { ConflictException, Injectable } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity, UserRole } from '../../../shared/entities/user.entity';
+import { generateTempPassword } from '../generate-temp-password';
 import { CreateTeacherCommand } from './create-teacher.command';
 
 export interface CreatedTeacher {
@@ -12,10 +12,6 @@ export interface CreatedTeacher {
   name: string;
   email: string;
   temporaryPassword: string;
-}
-
-function generateTempPassword(): string {
-  return randomBytes(9).toString('base64url'); // 12-char url-safe random password
 }
 
 @Injectable()
