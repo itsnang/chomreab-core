@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { StudentEntity } from '../../infrastructure/entities/student.entity';
+import { FindOptionsWhere, Repository } from 'typeorm';
+import {
+  StudentEntity,
+  StudentStatus,
+} from '../../infrastructure/entities/student.entity';
 import { GetStudentsQuery } from './get-students.query';
 
 @Injectable()
@@ -17,9 +20,10 @@ export class GetStudentsHandler implements IQueryHandler<
   ) {}
 
   execute(query: GetStudentsQuery): Promise<StudentEntity[]> {
-    return this.studentRepository.find({
-      where: query.classroomId ? { classroomId: query.classroomId } : {},
-      order: { name: 'ASC' },
-    });
+    const where: FindOptionsWhere<StudentEntity> = {};
+    if (query.classroomId) where.classroomId = query.classroomId;
+    if (!query.includeInactive) where.status = StudentStatus.ACTIVE;
+
+    return this.studentRepository.find({ where, order: { name: 'ASC' } });
   }
 }
