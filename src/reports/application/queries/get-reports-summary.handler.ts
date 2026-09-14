@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
-import { StudentEntity } from '../../../student/infrastructure/entities/student.entity';
+import {
+  StudentEntity,
+  StudentStatus,
+} from '../../../student/infrastructure/entities/student.entity';
 import { ClassroomEntity } from '../../../classroom/infrastructure/entities/classroom.entity';
 import {
   AttendanceRecordEntity,
@@ -15,6 +18,8 @@ const CHRONIC_ABSENCE_THRESHOLD = 3;
 
 export interface StudentReportRow {
   studentId: string;
+  /** Rows are per student *per classroom*, so studentId alone is not unique. */
+  classroomId: string;
   studentName: string;
   classroomName: string;
   present: number;
@@ -66,15 +71,18 @@ export class GetReportsSummaryHandler implements IQueryHandler<
     const start = windowStart(today);
 
     const [students, classrooms, windowRecords] = await Promise.all([
+      // Students who have left are kept: their attendance in the window really
+      // happened, and dropping them would rewrite history.
       this.studentRepository.find(),
       this.classroomRepository.find(),
       this.recordRepository.find({ where: { date: Between(start, today) } }),
     ]);
 
     const classroomById = new Map(classrooms.map((c) => [c.id, c]));
+    const classroomName = (id: string) =>
+      classroomById.get(id)?.name ?? 'Unassigned';
 
-    const studentRows: StudentReportRow[] = students.map((s) => {
-      const records = windowRecords.filter((r) => r.studentId === s.id);
+    const tally = (records: AttendanceRecordEntity[]) => {
       const present = records.filter(
         (r) => r.status === AttendanceStatus.PRESENT,
       ).length;
@@ -84,36 +92,68 @@ export class GetReportsSummaryHandler implements IQueryHandler<
       const absent = records.filter(
         (r) => r.status === AttendanceStatus.ABSENT,
       ).length;
-      const totalMarked = present + late + absent;
-      const ratePct =
-        totalMarked === 0
-          ? 100
-          : Math.round(((present + late) / totalMarked) * 100);
-      return {
-        studentId: s.id,
-        studentName: s.name,
-        classroomName: classroomById.get(s.classroomId)?.name ?? 'Unassigned',
-        present,
-        late,
-        absent,
-        ratePct,
-        chronic: absent >= CHRONIC_ABSENCE_THRESHOLD,
-      };
-    });
+      return { present, late, absent };
+    };
 
-    const overallRatePct =
-      studentRows.length === 0
+    const rate = (present: number, late: number, absent: number) => {
+      const totalMarked = present + late + absent;
+      return totalMarked === 0
         ? 100
-        : Math.round(
-            studentRows.reduce((sum, r) => sum + r.ratePct, 0) /
-              studentRows.length,
-          );
-    const chronicCount = studentRows.filter((r) => r.chronic).length;
+        : Math.round(((present + late) / totalMarked) * 100);
+    };
+
+    const studentRows: StudentReportRow[] = [];
+    let chronicCount = 0;
+
+    for (const student of students) {
+      const records = windowRecords.filter((r) => r.studentId === student.id);
+
+      // Chronic is a property of the child, not of one classroom: a transfer
+      // mid-window must not hide absences by splitting them across two rows.
+      const chronic = tally(records).absent >= CHRONIC_ABSENCE_THRESHOLD;
+      if (chronic) chronicCount += 1;
+
+      // Each record remembers the classroom the child was in that day, so a
+      // transfer leaves the earlier classroom's figures untouched.
+      const byClassroom = new Map<string, AttendanceRecordEntity[]>();
+      for (const record of records) {
+        const group = byClassroom.get(record.classroomId);
+        if (group) group.push(record);
+        else byClassroom.set(record.classroomId, [record]);
+      }
+      // No attendance in the window at all: attribute to where they are now.
+      if (byClassroom.size === 0) byClassroom.set(student.classroomId, []);
+
+      for (const [classroomId, classroomRecords] of byClassroom) {
+        const { present, late, absent } = tally(classroomRecords);
+        studentRows.push({
+          studentId: student.id,
+          classroomId,
+          studentName: student.name,
+          classroomName: classroomName(classroomId),
+          present,
+          late,
+          absent,
+          ratePct: rate(present, late, absent),
+          chronic,
+        });
+      }
+    }
+
+    const windowTally = tally(windowRecords);
+    const overallRatePct = rate(
+      windowTally.present,
+      windowTally.late,
+      windowTally.absent,
+    );
 
     const todayRecords = windowRecords.filter((r) => r.date === today);
     const dailySummary: ClassDailySummary[] = classrooms.map((c) => {
-      const roster = students.filter((s) => s.classroomId === c.id);
+      const roster = students.filter(
+        (s) => s.classroomId === c.id && s.status === StudentStatus.ACTIVE,
+      );
       const records = todayRecords.filter((r) => r.classroomId === c.id);
+      const markedToday = new Set(records.map((r) => r.studentId));
       const present = records.filter(
         (r) => r.status === AttendanceStatus.PRESENT,
       ).length;
@@ -129,7 +169,10 @@ export class GetReportsSummaryHandler implements IQueryHandler<
         present,
         late,
         absent,
-        unmarked: roster.length - present - late - absent,
+        // Counted from the roster rather than subtracted from it: a student
+        // deactivated after being marked today leaves a record behind, and
+        // subtracting would drive this negative.
+        unmarked: roster.filter((s) => !markedToday.has(s.id)).length,
       };
     });
 

@@ -1,0 +1,13 @@
+# Project-local ngrok config: exposes the API over HTTPS for Telegram's
+# webhook to reach during local dev. Carries no secrets — the authtoken lives
+# in your machine's own ngrok config and is merged in at start time (see
+# `npm run tunnel`, or the README's "Telegram bot setup" section).
+#
+# The free tier assigns a random *.ngrok-free.dev subdomain each run, so the
+# public URL changes between restarts — `npm run tunnel` re-registers it with
+# Telegram automatically every time rather than expecting a fixed one.
+version: "3"
+endpoints:
+  - name: api
+    upstream:
+      url: 8091

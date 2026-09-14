@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { StudentEntity } from '../../../student/infrastructure/entities/student.entity';
+import {
+  StudentEntity,
+  StudentStatus,
+} from '../../../student/infrastructure/entities/student.entity';
 import { AttendanceRecordEntity } from '../../infrastructure/entities/attendance-record.entity';
 import { GetRosterQuery } from './get-roster.query';
 
@@ -27,8 +30,10 @@ export class GetRosterHandler implements IQueryHandler<
   ) {}
 
   async execute(query: GetRosterQuery): Promise<RosterEntry[]> {
+    // A deactivated student has left; they are off every roster from that
+    // point on. Their past records stay, and stay readable.
     const students = await this.studentRepository.find({
-      where: { classroomId: query.classroomId },
+      where: { classroomId: query.classroomId, status: StudentStatus.ACTIVE },
       order: { name: 'ASC' },
     });
     const records = await this.recordRepository.find({

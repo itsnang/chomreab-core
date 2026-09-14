@@ -7,6 +7,7 @@ import { ParentLinkEntity } from '../../../parent-link/infrastructure/entities/p
 import { StudentEntity } from '../../../student/infrastructure/entities/student.entity';
 import { escapeTelegramHtml } from '../../../shared/utils/telegram-escape.util';
 import { SchoolSettingsService } from '../../../school-settings/application/services/school-settings.service';
+import { TelegramApiError } from '../../infrastructure/services/telegram-api.error';
 import {
   TELEGRAM_SERVICE,
   type ITelegramService,
@@ -56,6 +57,18 @@ export class AttendanceMarkedNotificationHandler implements IEventHandler<Attend
           `Failed to send attendance notification to chat ${link.telegramChatId}`,
           error instanceof Error ? error.stack : String(error),
         );
+
+        // A 403 is Telegram's own confirmation the chat is gone — the parent
+        // blocked the bot, or it was removed from a group — so the link is
+        // dead and retrying it forever at every future mark helps nobody.
+        // Anything else (a timeout, a 5xx, a rate limit) is not that
+        // unambiguous and the link is left in place.
+        if (error instanceof TelegramApiError && error.status === 403) {
+          await this.parentLinkRepository.delete({
+            studentId: link.studentId,
+            telegramChatId: link.telegramChatId,
+          });
+        }
       }
     }
   }

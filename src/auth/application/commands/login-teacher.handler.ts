@@ -13,7 +13,13 @@ import { LoginTeacherCommand } from './login-teacher.command';
 interface LoginTeacherResult {
   access_token: string;
   refresh_token: string;
-  user: { id: string; name: string; email: string; role: UserRole };
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+    mustChangePassword: boolean;
+  };
 }
 
 @CommandHandler(LoginTeacherCommand)
@@ -41,6 +47,7 @@ export class LoginTeacherHandler implements ICommandHandler<
         email: true,
         passwordHash: true,
         role: true,
+        mustChangePassword: true,
       },
     });
     if (!user) {
@@ -95,6 +102,7 @@ export class LoginTeacherHandler implements ICommandHandler<
         name: user.name,
         email: user.email,
         role: user.role,
+        mustChangePassword: user.mustChangePassword,
       },
     };
   }

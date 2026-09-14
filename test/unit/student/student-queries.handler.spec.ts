@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { GetStudentsHandler } from '../../../src/student/application/queries/get-students.handler';
+import { StudentStatus } from '../../../src/student/infrastructure/entities/student.entity';
 import { GetStudentsQuery } from '../../../src/student/application/queries/get-students.query';
 import { GetStudentHandler } from '../../../src/student/application/queries/get-student.handler';
 import { GetStudentQuery } from '../../../src/student/application/queries/get-student.query';
@@ -25,12 +26,12 @@ describe('Student query handlers', () => {
     getHandler = module.get(GetStudentHandler);
   });
 
-  it('lists students ordered by name', async () => {
+  it('lists active students ordered by name', async () => {
     repo.find.mockResolvedValue([{ id: '1', name: 'A' }]);
     const result = await listHandler.execute(new GetStudentsQuery());
     expect(result).toHaveLength(1);
     expect(repo.find).toHaveBeenCalledWith({
-      where: {},
+      where: { status: StudentStatus.ACTIVE },
       order: { name: 'ASC' },
     });
   });
@@ -39,7 +40,16 @@ describe('Student query handlers', () => {
     repo.find.mockResolvedValue([]);
     await listHandler.execute(new GetStudentsQuery('classroom-1'));
     expect(repo.find).toHaveBeenCalledWith({
-      where: { classroomId: 'classroom-1' },
+      where: { classroomId: 'classroom-1', status: StudentStatus.ACTIVE },
+      order: { name: 'ASC' },
+    });
+  });
+
+  it('includes students who have left when asked to', async () => {
+    repo.find.mockResolvedValue([]);
+    await listHandler.execute(new GetStudentsQuery(undefined, true));
+    expect(repo.find).toHaveBeenCalledWith({
+      where: {},
       order: { name: 'ASC' },
     });
   });

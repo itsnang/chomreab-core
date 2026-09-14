@@ -7,6 +7,8 @@ import { SchoolSettingsController } from './api/controllers/school-settings.cont
 import { GetSchoolSettingsHandler } from './application/queries/get-school-settings.handler';
 import { UpdateSchoolSettingsHandler } from './application/commands/update-school-settings.handler';
 import { SchoolSettingsService } from './application/services/school-settings.service';
+import { TELEGRAM_BOT_INFO_SERVICE } from './application/interfaces/telegram-bot-info.service';
+import { TelegramBotInfoService } from './infrastructure/services/telegram-bot-info.service';
 
 @Module({
   imports: [
@@ -19,6 +21,7 @@ import { SchoolSettingsService } from './application/services/school-settings.se
     GetSchoolSettingsHandler,
     UpdateSchoolSettingsHandler,
     SchoolSettingsService,
+    { provide: TELEGRAM_BOT_INFO_SERVICE, useClass: TelegramBotInfoService },
   ],
   exports: [SchoolSettingsService],
 })

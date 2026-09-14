@@ -3,7 +3,10 @@ import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ClassroomEntity } from '../../../classroom/infrastructure/entities/classroom.entity';
-import { StudentEntity } from '../../../student/infrastructure/entities/student.entity';
+import {
+  StudentEntity,
+  StudentStatus,
+} from '../../../student/infrastructure/entities/student.entity';
 import { AttendanceRecordEntity } from '../../infrastructure/entities/attendance-record.entity';
 import { GetMyClassesTodayQuery } from './get-my-classes-today.query';
 
@@ -39,8 +42,10 @@ export class GetMyClassesTodayHandler implements IQueryHandler<
 
     const classroomIds = classrooms.map((c) => c.id);
     const [students, records] = await Promise.all([
+      // Deactivated students are off the roster, so they must not inflate
+      // studentCount or leave a class permanently "N left".
       this.studentRepository.find({
-        where: { classroomId: In(classroomIds) },
+        where: { classroomId: In(classroomIds), status: StudentStatus.ACTIVE },
       }),
       this.recordRepository.find({
         where: { date: query.date, classroomId: In(classroomIds) },

@@ -36,8 +36,13 @@ export class StudentsController {
   @ApiOperation({ summary: 'List students, optionally filtered by classroom' })
   @Roles(UserRole.ADMIN, UserRole.TEACHER)
   @Get()
-  list(@Query('classroom_id') classroomId?: string) {
-    return this.queryBus.execute(new GetStudentsQuery(classroomId));
+  list(
+    @Query('classroom_id') classroomId?: string,
+    @Query('include_inactive') includeInactive?: string,
+  ) {
+    return this.queryBus.execute(
+      new GetStudentsQuery(classroomId, includeInactive === 'true'),
+    );
   }
 
   @ApiOperation({ summary: 'Get one student' })

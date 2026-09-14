@@ -42,12 +42,9 @@ See `CLAUDE.md` for architecture/module conventions.
 ## Telegram bot setup (for parent notifications)
 
 1. Message [@BotFather](https://t.me/BotFather) on Telegram, send `/newbot`, follow the prompts. Copy the token into `TELEGRAM_BOT_TOKEN` in `.env`.
-2. Generate a webhook secret and put it in `TELEGRAM_WEBHOOK_SECRET` (e.g. `openssl rand -hex 16`).
-3. Expose your local API over HTTPS with a tunnel, e.g. `cloudflared tunnel --url http://localhost:8091` or `ngrok http 8091`. Note the public HTTPS URL it prints.
-4. Register the webhook with Telegram:
-   ```bash
-   curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
-     -H 'Content-Type: application/json' \
-     -d '{"url": "<TUNNEL_URL>/telegram/webhook", "secret_token": "<TELEGRAM_WEBHOOK_SECRET>"}'
-   ```
-5. Message your bot on Telegram: `/start`, then `/link <code>` using a code generated from the admin dashboard's Students screen.
+2. Generate a webhook secret and put it in `TELEGRAM_WEBHOOK_SECRET` (e.g. `openssl rand -hex 16`) — this is a password you invent, not something Telegram gives you; it just has to match what you register with Telegram in the next step.
+3. Install [ngrok](https://ngrok.com/download) if you don't have it, and run `ngrok config add-authtoken <token>` once (from your ngrok.com dashboard) — this saves to your machine's own ngrok config, never committed.
+4. `npm run tunnel` — starts a tunnel to `localhost:8091` (config in the committed `ngrok.yml`, merged with your machine's authtoken) and registers the resulting URL as the Telegram webhook automatically. Leave it running; `Ctrl+C` stops the tunnel.
+
+   The free tier hands out a new random `*.ngrok-free.dev` subdomain each run, so the script re-registers the webhook every time rather than assuming a fixed URL — no manual `curl` step needed.
+5. Message your bot on Telegram: `/start`, then `/link <code>` using a code generated from the admin dashboard's Students screen — or tap the invite link the Linking codes screen generates once a bot token is saved in Settings.

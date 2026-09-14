@@ -29,7 +29,7 @@ export class LinkParentHandler implements ICommandHandler<
   ) {}
 
   async execute(command: LinkParentCommand): Promise<void> {
-    const { telegramChatId, code } = command;
+    const { telegramChatId, code, chatType } = command;
 
     const linkingCode = await this.linkingCodeRepository.findOneBy({
       code: code.toUpperCase(),
@@ -70,8 +70,13 @@ export class LinkParentHandler implements ICommandHandler<
       });
     }
 
-    linkingCode.usedAt = new Date();
-    await this.linkingCodeRepository.save(linkingCode);
+    // A private redemption burns the code, exactly as before. Adding the bot
+    // to a group does not: the same code may add it to a second family group,
+    // or re-add it after an accidental removal, until it expires on its own.
+    if (chatType === 'private') {
+      linkingCode.usedAt = new Date();
+      await this.linkingCodeRepository.save(linkingCode);
+    }
 
     const safeName = escapeTelegramHtml(student.name);
     await this.telegram.sendMessage(

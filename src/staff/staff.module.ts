@@ -7,6 +7,8 @@ import { ClassroomEntity } from '../classroom/infrastructure/entities/classroom.
 import { RefreshTokenEntity } from '../auth/infrastructure/entities/refresh-token.entity';
 import { StaffController } from './api/controllers/staff.controller';
 import { CreateTeacherHandler } from './application/commands/create-teacher.handler';
+import { UpdateTeacherHandler } from './application/commands/update-teacher.handler';
+import { ResetTeacherPasswordHandler } from './application/commands/reset-teacher-password.handler';
 import { DeleteTeacherHandler } from './application/commands/delete-teacher.handler';
 import { GetTeachersHandler } from './application/queries/get-teachers.handler';
 
@@ -17,6 +19,12 @@ import { GetTeachersHandler } from './application/queries/get-teachers.handler';
     JwtModule.register({}),
   ],
   controllers: [StaffController],
-  providers: [CreateTeacherHandler, DeleteTeacherHandler, GetTeachersHandler],
+  providers: [
+    CreateTeacherHandler,
+    UpdateTeacherHandler,
+    ResetTeacherPasswordHandler,
+    DeleteTeacherHandler,
+    GetTeachersHandler,
+  ],
 })
 export class StaffModule {}

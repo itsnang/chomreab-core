@@ -22,6 +22,11 @@ export class UserEntity {
   @Column({ type: 'enum', enum: UserRole })
   role: UserRole;
 
+  /** Set when an admin creates the account with a generated temporary
+   *  password. The client keeps the user out of the app until they replace it. */
+  @Column({ type: 'boolean', default: false })
+  mustChangePassword: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 }

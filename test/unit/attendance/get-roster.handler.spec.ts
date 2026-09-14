@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { GetRosterHandler } from '../../../src/attendance/application/queries/get-roster.handler';
+import { StudentStatus } from '../../../src/student/infrastructure/entities/student.entity';
 import { GetRosterQuery } from '../../../src/attendance/application/queries/get-roster.query';
 import { StudentEntity } from '../../../src/student/infrastructure/entities/student.entity';
 import {
@@ -65,7 +66,7 @@ describe('GetRosterHandler', () => {
     await handler.execute(new GetRosterQuery('class-42', '2026-01-05'));
 
     expect(studentRepo.find).toHaveBeenCalledWith({
-      where: { classroomId: 'class-42' },
+      where: { classroomId: 'class-42', status: StudentStatus.ACTIVE },
       order: { name: 'ASC' },
     });
     expect(recordRepo.find).toHaveBeenCalledWith({
