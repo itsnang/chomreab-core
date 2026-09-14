@@ -6,6 +6,7 @@ import { GetSchoolSettingsQuery } from '../../../src/school-settings/application
 import { UpdateSchoolSettingsHandler } from '../../../src/school-settings/application/commands/update-school-settings.handler';
 import { UpdateSchoolSettingsCommand } from '../../../src/school-settings/application/commands/update-school-settings.command';
 import { SchoolSettingsService } from '../../../src/school-settings/application/services/school-settings.service';
+import { TELEGRAM_BOT_INFO_SERVICE } from '../../../src/school-settings/application/interfaces/telegram-bot-info.service';
 import {
   SCHOOL_SETTINGS_ID,
   SchoolSettingsEntity,
@@ -17,6 +18,7 @@ describe('School settings', () => {
   let service: SchoolSettingsService;
   let repo: { create: jest.Mock; save: jest.Mock; findOneBy: jest.Mock };
   let configService: { get: jest.Mock };
+  let telegramBotInfo: { getUsername: jest.Mock };
 
   beforeEach(async () => {
     repo = {
@@ -27,6 +29,7 @@ describe('School settings', () => {
       findOneBy: jest.fn(),
     };
     configService = { get: jest.fn() };
+    telegramBotInfo = { getUsername: jest.fn() };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -35,6 +38,10 @@ describe('School settings', () => {
         SchoolSettingsService,
         { provide: getRepositoryToken(SchoolSettingsEntity), useValue: repo },
         { provide: ConfigService, useValue: configService },
+        {
+          provide: TELEGRAM_BOT_INFO_SERVICE,
+          useValue: telegramBotInfo,
+        },
       ],
     }).compile();
 
@@ -161,5 +168,102 @@ describe('School settings', () => {
       ),
     );
     expect(result.telegramBotToken).toBe('existing-token');
+  });
+
+  it('returns the cached bot username', async () => {
+    repo.findOneBy.mockResolvedValue({
+      id: SCHOOL_SETTINGS_ID,
+      telegramBotUsername: 'chomreabbot',
+    });
+    const username = await service.getBotUsername();
+    expect(username).toBe('chomreabbot');
+  });
+
+  it('returns null when no username has ever been cached', async () => {
+    repo.findOneBy.mockResolvedValue(null);
+    const username = await service.getBotUsername();
+    expect(username).toBeNull();
+  });
+
+  it('fetches and caches the username when a new token is saved', async () => {
+    repo.findOneBy.mockResolvedValue({
+      id: SCHOOL_SETTINGS_ID,
+      telegramBotToken: 'old-token',
+      telegramBotUsername: 'old_bot',
+    });
+    telegramBotInfo.getUsername.mockResolvedValue('new_bot');
+
+    const result = await updateHandler.execute(
+      new UpdateSchoolSettingsCommand(
+        'New School',
+        20,
+        'Absent: {{student_name}}',
+        'new-token',
+      ),
+    );
+
+    expect(telegramBotInfo.getUsername).toHaveBeenCalledWith('new-token');
+    expect(result.telegramBotUsername).toBe('new_bot');
+  });
+
+  it('does not call Telegram when the token is unchanged', async () => {
+    repo.findOneBy.mockResolvedValue({
+      id: SCHOOL_SETTINGS_ID,
+      telegramBotToken: 'same-token',
+      telegramBotUsername: 'same_bot',
+    });
+
+    const result = await updateHandler.execute(
+      new UpdateSchoolSettingsCommand(
+        'New School',
+        20,
+        'Absent: {{student_name}}',
+        'same-token',
+      ),
+    );
+
+    expect(telegramBotInfo.getUsername).not.toHaveBeenCalled();
+    expect(result.telegramBotUsername).toBe('same_bot');
+  });
+
+  it('does not call Telegram when the token is left unspecified', async () => {
+    repo.findOneBy.mockResolvedValue({
+      id: SCHOOL_SETTINGS_ID,
+      telegramBotToken: 'existing-token',
+      telegramBotUsername: 'existing_bot',
+    });
+
+    const result = await updateHandler.execute(
+      new UpdateSchoolSettingsCommand(
+        'New School',
+        20,
+        'Absent: {{student_name}}',
+        null,
+      ),
+    );
+
+    expect(telegramBotInfo.getUsername).not.toHaveBeenCalled();
+    expect(result.telegramBotUsername).toBe('existing_bot');
+  });
+
+  it('keeps the previously cached username when the getMe lookup fails', async () => {
+    repo.findOneBy.mockResolvedValue({
+      id: SCHOOL_SETTINGS_ID,
+      telegramBotToken: 'old-token',
+      telegramBotUsername: 'old_bot',
+    });
+    telegramBotInfo.getUsername.mockResolvedValue(null);
+
+    const result = await updateHandler.execute(
+      new UpdateSchoolSettingsCommand(
+        'New School',
+        20,
+        'Absent: {{student_name}}',
+        'bad-token',
+      ),
+    );
+
+    expect(result.telegramBotToken).toBe('bad-token');
+    expect(result.telegramBotUsername).toBe('old_bot');
   });
 });

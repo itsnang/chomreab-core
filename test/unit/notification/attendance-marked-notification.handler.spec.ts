@@ -6,15 +6,19 @@ import { ParentLinkEntity } from '../../../src/parent-link/infrastructure/entiti
 import { StudentEntity } from '../../../src/student/infrastructure/entities/student.entity';
 import { TELEGRAM_SERVICE } from '../../../src/notification/application/interfaces/telegram.service';
 import { SchoolSettingsService } from '../../../src/school-settings/application/services/school-settings.service';
+import { TelegramApiError } from '../../../src/notification/infrastructure/services/telegram-api.error';
 
 describe('AttendanceMarkedNotificationHandler', () => {
   let handler: AttendanceMarkedNotificationHandler;
-  let parentLinkRepo: { find: jest.Mock };
+  let parentLinkRepo: { find: jest.Mock; delete: jest.Mock };
   let studentRepo: { findOneBy: jest.Mock };
   let telegramService: { sendMessage: jest.Mock };
 
   beforeEach(async () => {
-    parentLinkRepo = { find: jest.fn() };
+    parentLinkRepo = {
+      find: jest.fn(),
+      delete: jest.fn().mockResolvedValue(undefined),
+    };
     studentRepo = { findOneBy: jest.fn() };
     telegramService = { sendMessage: jest.fn().mockResolvedValue(undefined) };
 
@@ -112,6 +116,43 @@ describe('AttendanceMarkedNotificationHandler', () => {
       ),
     );
 
+    expect(telegramService.sendMessage).toHaveBeenCalledTimes(2);
+    // A non-403 failure is transient (network blip, rate limit, ...) —
+    // nothing here says the chat is actually gone, so the link stays.
+    expect(parentLinkRepo.delete).not.toHaveBeenCalled();
+  });
+
+  it('unlinks a parent whose chat rejected delivery with 403', async () => {
+    parentLinkRepo.find.mockResolvedValue([
+      { studentId: 'student-1', telegramChatId: 'chat-1' },
+      { studentId: 'student-1', telegramChatId: 'chat-2' },
+    ]);
+    studentRepo.findOneBy.mockResolvedValue({ id: 'student-1', name: 'Sokha' });
+    telegramService.sendMessage.mockImplementation((chatId: string) => {
+      if (chatId === 'chat-1') {
+        return Promise.reject(new TelegramApiError(403));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    await handler.handle(
+      new AttendanceMarkedEvent(
+        'student-1',
+        'class-1',
+        '2026-08-28',
+        'present',
+        null,
+      ),
+    );
+
+    // 403 is Telegram's own confirmation the chat is gone (blocked, or the
+    // bot was removed from a group) — only that link comes down.
+    expect(parentLinkRepo.delete).toHaveBeenCalledTimes(1);
+    expect(parentLinkRepo.delete).toHaveBeenCalledWith({
+      studentId: 'student-1',
+      telegramChatId: 'chat-1',
+    });
+    // The other parent's delivery, and their link, are untouched.
     expect(telegramService.sendMessage).toHaveBeenCalledTimes(2);
   });
 

@@ -26,6 +26,14 @@ export class SchoolSettingsService {
     );
   }
 
+  /** The bot's cached @username, for building invite deep links. Fetched via
+   *  Telegram's `getMe` and cached by `UpdateSchoolSettingsHandler` whenever
+   *  the token changes — never entered by an admin, and never fetched here. */
+  async getBotUsername(): Promise<string | null> {
+    const row = await this.repository.findOneBy({ id: SCHOOL_SETTINGS_ID });
+    return row?.telegramBotUsername ?? null;
+  }
+
   /** The saved absence-notification template, or the built-in default if
    *  settings have never been saved. Supports a single `{{student_name}}`
    *  placeholder. */

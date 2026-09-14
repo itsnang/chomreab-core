@@ -4,6 +4,8 @@ import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ConfigService } from '@nestjs/config';
 import { TelegramWebhookController } from '../../../src/notification/api/controllers/telegram-webhook.controller';
 import { TELEGRAM_SERVICE } from '../../../src/notification/application/interfaces/telegram.service';
+import { LinkParentCommand } from '../../../src/notification/application/commands/link-parent.command';
+import { MigrateGroupChatCommand } from '../../../src/notification/application/commands/migrate-group-chat.command';
 
 describe('TelegramWebhookController', () => {
   let controller: TelegramWebhookController;
@@ -82,5 +84,98 @@ describe('TelegramWebhookController', () => {
     await controller.handleUpdate(update, 'correct-secret-value');
 
     expect(commandBus.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('redeems a private /start deep link as a private LinkParentCommand', async () => {
+    configService.getOrThrow.mockReturnValue('correct-secret-value');
+    await buildModule();
+
+    const update = {
+      message: { chat: { id: 42, type: 'private' }, text: '/start ABCD1234' },
+    };
+    await controller.handleUpdate(update, 'correct-secret-value');
+
+    expect(commandBus.execute).toHaveBeenCalledWith(
+      new LinkParentCommand('42', 'ABCD1234', 'private'),
+    );
+  });
+
+  it('redeems a group /startgroup deep link (bot-mentioned form) as a group LinkParentCommand', async () => {
+    configService.getOrThrow.mockReturnValue('correct-secret-value');
+    await buildModule();
+
+    const update = {
+      message: {
+        chat: { id: -100, type: 'group' },
+        text: '/start@chomreabbot ABCD1234',
+      },
+    };
+    await controller.handleUpdate(update, 'correct-secret-value');
+
+    expect(commandBus.execute).toHaveBeenCalledWith(
+      new LinkParentCommand('-100', 'ABCD1234', 'group'),
+    );
+  });
+
+  it('treats a supergroup the same as a group for deep-link redemption', async () => {
+    configService.getOrThrow.mockReturnValue('correct-secret-value');
+    await buildModule();
+
+    const update = {
+      message: {
+        chat: { id: -100, type: 'supergroup' },
+        text: '/start ABCD1234',
+      },
+    };
+    await controller.handleUpdate(update, 'correct-secret-value');
+
+    expect(commandBus.execute).toHaveBeenCalledWith(
+      new LinkParentCommand('-100', 'ABCD1234', 'group'),
+    );
+  });
+
+  it('still sends the welcome message for a bare /start with no payload', async () => {
+    configService.getOrThrow.mockReturnValue('correct-secret-value');
+    await buildModule();
+
+    const update = {
+      message: { chat: { id: 42, type: 'private' }, text: '/start' },
+    };
+    await controller.handleUpdate(update, 'correct-secret-value');
+
+    expect(commandBus.execute).not.toHaveBeenCalled();
+    expect(telegramService.sendMessage).toHaveBeenCalledWith(
+      '42',
+      expect.stringContaining('linking code'),
+    );
+  });
+
+  it('derives chatType for the typed /link path from the chat, not just the deep link', async () => {
+    configService.getOrThrow.mockReturnValue('correct-secret-value');
+    await buildModule();
+
+    const update = {
+      message: { chat: { id: -100, type: 'group' }, text: '/link ABCD1234' },
+    };
+    await controller.handleUpdate(update, 'correct-secret-value');
+
+    expect(commandBus.execute).toHaveBeenCalledWith(
+      new LinkParentCommand('-100', 'ABCD1234', 'group'),
+    );
+  });
+
+  it('dispatches a supergroup migration instead of falling through to unknown-command', async () => {
+    configService.getOrThrow.mockReturnValue('correct-secret-value');
+    await buildModule();
+
+    const update = {
+      message: { chat: { id: -100, type: 'group' }, migrate_to_chat_id: -200 },
+    };
+    await controller.handleUpdate(update, 'correct-secret-value');
+
+    expect(commandBus.execute).toHaveBeenCalledWith(
+      new MigrateGroupChatCommand('-100', '-200'),
+    );
+    expect(telegramService.sendMessage).not.toHaveBeenCalled();
   });
 });

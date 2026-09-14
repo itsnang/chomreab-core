@@ -47,7 +47,9 @@ describe('LinkParentHandler', () => {
 
   it('rejects an unknown code without creating a link', async () => {
     linkingCodeRepo.findOneBy.mockResolvedValue(null);
-    await handler.execute(new LinkParentCommand('chat-1', 'BADCODE1'));
+    await handler.execute(
+      new LinkParentCommand('chat-1', 'BADCODE1', 'private'),
+    );
     expect(parentLinkRepo.save).not.toHaveBeenCalled();
     expect(telegramService.sendMessage).toHaveBeenCalledWith(
       'chat-1',
@@ -62,7 +64,9 @@ describe('LinkParentHandler', () => {
       usedAt: new Date(),
       expiresAt: new Date(Date.now() + 100000),
     });
-    await handler.execute(new LinkParentCommand('chat-1', 'abcd1234'));
+    await handler.execute(
+      new LinkParentCommand('chat-1', 'abcd1234', 'private'),
+    );
     expect(parentLinkRepo.save).not.toHaveBeenCalled();
   });
 
@@ -73,7 +77,9 @@ describe('LinkParentHandler', () => {
       usedAt: null,
       expiresAt: new Date(Date.now() - 1000),
     });
-    await handler.execute(new LinkParentCommand('chat-1', 'ABCD1234'));
+    await handler.execute(
+      new LinkParentCommand('chat-1', 'ABCD1234', 'private'),
+    );
     expect(parentLinkRepo.save).not.toHaveBeenCalled();
   });
 
@@ -87,7 +93,9 @@ describe('LinkParentHandler', () => {
     linkingCodeRepo.findOneBy.mockResolvedValue(linkingCode);
     studentRepo.findOneBy.mockResolvedValue({ id: 'student-1', name: 'Sokha' });
 
-    await handler.execute(new LinkParentCommand('chat-1', 'ABCD1234'));
+    await handler.execute(
+      new LinkParentCommand('chat-1', 'ABCD1234', 'private'),
+    );
 
     expect(parentLinkRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -119,7 +127,9 @@ describe('LinkParentHandler', () => {
       telegramChatId: 'chat-1',
     });
 
-    await handler.execute(new LinkParentCommand('chat-1', 'WXYZ9876'));
+    await handler.execute(
+      new LinkParentCommand('chat-1', 'WXYZ9876', 'private'),
+    );
 
     expect(parentLinkRepo.save).not.toHaveBeenCalled();
     expect(linkingCodeRepo.save).toHaveBeenCalledWith(
@@ -129,5 +139,107 @@ describe('LinkParentHandler', () => {
       'chat-1',
       expect.stringContaining('already linked'),
     );
+  });
+
+  it('links a group chat and marks the code used on success (matches private today)', async () => {
+    const linkingCode = {
+      code: 'ABCD1234',
+      studentId: 'student-1',
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 100000),
+    };
+    linkingCodeRepo.findOneBy.mockResolvedValue(linkingCode);
+    studentRepo.findOneBy.mockResolvedValue({ id: 'student-1', name: 'Sokha' });
+
+    await handler.execute(
+      new LinkParentCommand('group-1', 'ABCD1234', 'group'),
+    );
+
+    expect(parentLinkRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        studentId: 'student-1',
+        telegramChatId: 'group-1',
+      }),
+    );
+  });
+
+  it('does not mark the code used when redeemed by adding the bot to a group', async () => {
+    const linkingCode = {
+      code: 'ABCD1234',
+      studentId: 'student-1',
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 100000),
+    };
+    linkingCodeRepo.findOneBy.mockResolvedValue(linkingCode);
+    studentRepo.findOneBy.mockResolvedValue({ id: 'student-1', name: 'Sokha' });
+
+    await handler.execute(
+      new LinkParentCommand('group-1', 'ABCD1234', 'group'),
+    );
+
+    expect(linkingCodeRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('lets the same code add the bot to a second group', async () => {
+    // The first group's redemption is simulated by the code already being
+    // unused (group redemption never burns it) — this call is the second
+    // group picking up the very same code.
+    const linkingCode = {
+      code: 'ABCD1234',
+      studentId: 'student-1',
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 100000),
+    };
+    linkingCodeRepo.findOneBy.mockResolvedValue(linkingCode);
+    studentRepo.findOneBy.mockResolvedValue({ id: 'student-1', name: 'Sokha' });
+
+    await handler.execute(
+      new LinkParentCommand('group-2', 'ABCD1234', 'group'),
+    );
+
+    expect(parentLinkRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        studentId: 'student-1',
+        telegramChatId: 'group-2',
+      }),
+    );
+    expect(telegramService.sendMessage).toHaveBeenCalledWith(
+      'group-2',
+      expect.stringContaining('Sokha'),
+    );
+  });
+
+  it('rejects a code already burned by a private redemption, even for a group', async () => {
+    linkingCodeRepo.findOneBy.mockResolvedValue({
+      code: 'ABCD1234',
+      studentId: 'student-1',
+      usedAt: new Date(),
+      expiresAt: new Date(Date.now() + 100000),
+    });
+
+    await handler.execute(
+      new LinkParentCommand('group-1', 'ABCD1234', 'group'),
+    );
+
+    expect(parentLinkRepo.save).not.toHaveBeenCalled();
+    expect(telegramService.sendMessage).toHaveBeenCalledWith(
+      'group-1',
+      expect.stringContaining('invalid or expired'),
+    );
+  });
+
+  it('rejects a second private redemption of a code already used privately', async () => {
+    linkingCodeRepo.findOneBy.mockResolvedValue({
+      code: 'ABCD1234',
+      studentId: 'student-1',
+      usedAt: new Date(),
+      expiresAt: new Date(Date.now() + 100000),
+    });
+
+    await handler.execute(
+      new LinkParentCommand('chat-2', 'ABCD1234', 'private'),
+    );
+
+    expect(parentLinkRepo.save).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { SchoolSettingsService } from '../../../school-settings/application/services/school-settings.service';
 import type { ITelegramService } from '../../application/interfaces/telegram.service';
+import { TelegramApiError } from './telegram-api.error';
 
 @Injectable()
 export class TelegramService implements ITelegramService {
@@ -20,7 +21,7 @@ export class TelegramService implements ITelegramService {
       },
     );
     if (!response.ok) {
-      throw new Error(`Telegram API error: ${response.status}`);
+      throw new TelegramApiError(response.status);
     }
   }
 }

@@ -10,6 +10,7 @@ import { NotificationController } from './api/controllers/notification.controlle
 import { TelegramWebhookController } from './api/controllers/telegram-webhook.controller';
 import { SendNotificationHandler } from './application/commands/send-notification.handler';
 import { LinkParentHandler } from './application/commands/link-parent.handler';
+import { MigrateGroupChatHandler } from './application/commands/migrate-group-chat.handler';
 import { GetAttendanceStatusHandler } from './application/queries/get-attendance-status.handler';
 import { AttendanceMarkedNotificationHandler } from './application/events/attendance-marked-notification.handler';
 import { TELEGRAM_SERVICE } from './application/interfaces/telegram.service';
@@ -32,6 +33,7 @@ import { SchoolSettingsModule } from '../school-settings/school-settings.module'
   providers: [
     SendNotificationHandler,
     LinkParentHandler,
+    MigrateGroupChatHandler,
     GetAttendanceStatusHandler,
     AttendanceMarkedNotificationHandler,
     { provide: TELEGRAM_SERVICE, useClass: TelegramService },
