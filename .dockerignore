@@ -5,7 +5,6 @@ dist/
 .env.*
 coverage/
 test/
-database/seeds/
 *.log
 *.md
 .eslintrc*
