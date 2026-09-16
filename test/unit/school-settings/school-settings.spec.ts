@@ -6,7 +6,7 @@ import { GetSchoolSettingsQuery } from '../../../src/school-settings/application
 import { UpdateSchoolSettingsHandler } from '../../../src/school-settings/application/commands/update-school-settings.handler';
 import { UpdateSchoolSettingsCommand } from '../../../src/school-settings/application/commands/update-school-settings.command';
 import { SchoolSettingsService } from '../../../src/school-settings/application/services/school-settings.service';
-import { TELEGRAM_BOT_INFO_SERVICE } from '../../../src/school-settings/application/interfaces/telegram-bot-info.service';
+import { TELEGRAM_BOT_ADMIN_SERVICE } from '../../../src/school-settings/application/interfaces/telegram-bot-admin.service';
 import {
   SCHOOL_SETTINGS_ID,
   SchoolSettingsEntity,
@@ -18,7 +18,12 @@ describe('School settings', () => {
   let service: SchoolSettingsService;
   let repo: { create: jest.Mock; save: jest.Mock; findOneBy: jest.Mock };
   let configService: { get: jest.Mock };
-  let telegramBotInfo: { getUsername: jest.Mock };
+  let telegramBotAdmin: {
+    getUsername: jest.Mock;
+    setWebhook: jest.Mock;
+    deleteWebhook: jest.Mock;
+    getWebhookInfo: jest.Mock;
+  };
 
   beforeEach(async () => {
     repo = {
@@ -29,7 +34,15 @@ describe('School settings', () => {
       findOneBy: jest.fn(),
     };
     configService = { get: jest.fn() };
-    telegramBotInfo = { getUsername: jest.fn() };
+    // `configService.get` returns undefined here, so no public URL resolves
+    // and these tests exercise the skip-registration path — which is what the
+    // token-preservation rules below are actually about.
+    telegramBotAdmin = {
+      getUsername: jest.fn(),
+      setWebhook: jest.fn().mockResolvedValue({ ok: true }),
+      deleteWebhook: jest.fn().mockResolvedValue({ ok: true }),
+      getWebhookInfo: jest.fn(),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -39,8 +52,8 @@ describe('School settings', () => {
         { provide: getRepositoryToken(SchoolSettingsEntity), useValue: repo },
         { provide: ConfigService, useValue: configService },
         {
-          provide: TELEGRAM_BOT_INFO_SERVICE,
-          useValue: telegramBotInfo,
+          provide: TELEGRAM_BOT_ADMIN_SERVICE,
+          useValue: telegramBotAdmin,
         },
       ],
     }).compile();
@@ -191,7 +204,7 @@ describe('School settings', () => {
       telegramBotToken: 'old-token',
       telegramBotUsername: 'old_bot',
     });
-    telegramBotInfo.getUsername.mockResolvedValue('new_bot');
+    telegramBotAdmin.getUsername.mockResolvedValue('new_bot');
 
     const result = await updateHandler.execute(
       new UpdateSchoolSettingsCommand(
@@ -202,7 +215,7 @@ describe('School settings', () => {
       ),
     );
 
-    expect(telegramBotInfo.getUsername).toHaveBeenCalledWith('new-token');
+    expect(telegramBotAdmin.getUsername).toHaveBeenCalledWith('new-token');
     expect(result.telegramBotUsername).toBe('new_bot');
   });
 
@@ -222,7 +235,7 @@ describe('School settings', () => {
       ),
     );
 
-    expect(telegramBotInfo.getUsername).not.toHaveBeenCalled();
+    expect(telegramBotAdmin.getUsername).not.toHaveBeenCalled();
     expect(result.telegramBotUsername).toBe('same_bot');
   });
 
@@ -242,7 +255,7 @@ describe('School settings', () => {
       ),
     );
 
-    expect(telegramBotInfo.getUsername).not.toHaveBeenCalled();
+    expect(telegramBotAdmin.getUsername).not.toHaveBeenCalled();
     expect(result.telegramBotUsername).toBe('existing_bot');
   });
 
@@ -252,7 +265,7 @@ describe('School settings', () => {
       telegramBotToken: 'old-token',
       telegramBotUsername: 'old_bot',
     });
-    telegramBotInfo.getUsername.mockResolvedValue(null);
+    telegramBotAdmin.getUsername.mockResolvedValue(null);
 
     const result = await updateHandler.execute(
       new UpdateSchoolSettingsCommand(

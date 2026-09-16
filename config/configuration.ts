@@ -1,3 +1,20 @@
+/** The deployment's own public base URL, used to tell Telegram where to
+ *  deliver updates. An explicit value wins; otherwise fall back to the
+ *  hosting platform's injected domain, so a standard deploy needs no extra
+ *  configuration. Deliberately never derived from a request's `Host` header:
+ *  a spoofed header would point a school's bot at someone else's server. */
+const resolvePublicUrl = (): string | null => {
+  const explicit = process.env.PUBLIC_API_URL?.trim();
+  if (explicit) return explicit.replace(/\/+$/, '');
+
+  const platformDomain = process.env.RAILWAY_PUBLIC_DOMAIN?.trim();
+  if (platformDomain) return `https://${platformDomain.replace(/\/+$/, '')}`;
+
+  // Neither set: local development. Webhook registration is skipped entirely
+  // and `scripts/tunnel.sh` keeps ownership of the webhook.
+  return null;
+};
+
 const required = (name: string): string => {
   const v = process.env[name];
   if (!v || v.length < 32) {
@@ -14,11 +31,30 @@ export default () => {
     throw new Error('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different');
   }
 
+  const publicUrl = resolvePublicUrl();
+
+  // Registering a webhook without a secret is worse than not registering one:
+  // the webhook controller requires the secret on every update, so Telegram
+  // would deliver successfully and this deployment would fail every single
+  // one — silently, from the school's point of view. Refuse to boot instead,
+  // the same way a weak JWT secret is refused above. Conditional on a public
+  // URL so local development is untouched.
+  if (publicUrl && !process.env.TELEGRAM_WEBHOOK_SECRET) {
+    throw new Error(
+      'TELEGRAM_WEBHOOK_SECRET must be set when the deployment has a public ' +
+        `URL (${publicUrl}). Without it every Telegram update is rejected.`,
+    );
+  }
+
   return {
     port: parseInt(process.env.PORT ?? '3000', 10),
+    publicUrl,
     telegram: {
       botToken: process.env.TELEGRAM_BOT_TOKEN,
       webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
+      /** Where Telegram should deliver updates, or null when this deployment
+       *  is not publicly reachable and registration must be skipped. */
+      webhookUrl: publicUrl ? `${publicUrl}/telegram/webhook` : null,
     },
     database: {
       host: process.env.DB_HOST ?? 'localhost',
