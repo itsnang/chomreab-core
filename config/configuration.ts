@@ -80,5 +80,14 @@ export default () => {
       refreshExpiry: process.env.JWT_REFRESH_EXPIRY ?? '7d',
       operatorSecret,
     },
+    email: {
+      // No key configured: EmailService logs instead of sending, so local
+      // development and a demo never need a real provider account.
+      resendApiKey: process.env.RESEND_API_KEY,
+      fromAddress: process.env.EMAIL_FROM ?? 'Chomreab <noreply@chomreab.com>',
+    },
+    // Where a person actually clicks — the admin web app, not this API.
+    // Verification and password-reset links point here.
+    adminAppUrl: (process.env.ADMIN_APP_URL ?? 'http://localhost:3001').replace(/\/+$/, ''),
   };
 };

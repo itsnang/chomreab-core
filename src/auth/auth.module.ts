@@ -5,6 +5,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { UserEntity } from '../shared/entities/user.entity';
 import { RefreshTokenEntity } from './infrastructure/entities/refresh-token.entity';
 import { PasswordResetTokenEntity } from './infrastructure/entities/password-reset-token.entity';
+import { SchoolEntity } from '../school/infrastructure/entities/school.entity';
 import { AuthController } from './api/controllers/auth.controller';
 import { LoginAdminHandler } from './application/commands/login-admin.handler';
 import { LoginTeacherHandler } from './application/commands/login-teacher.handler';
@@ -21,6 +22,7 @@ import { EmailService } from './infrastructure/services/email.service';
       UserEntity,
       RefreshTokenEntity,
       PasswordResetTokenEntity,
+      SchoolEntity,
     ]),
     JwtModule.register({}),
   ],

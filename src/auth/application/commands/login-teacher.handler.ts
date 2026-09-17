@@ -8,6 +8,7 @@ import ms from 'ms';
 import * as bcrypt from 'bcrypt';
 import { UserEntity, UserRole } from '../../../shared/entities/user.entity';
 import { RefreshTokenEntity } from '../../infrastructure/entities/refresh-token.entity';
+import { SchoolEntity } from '../../../school/infrastructure/entities/school.entity';
 import { LoginTeacherCommand } from './login-teacher.command';
 
 interface LoginTeacherResult {
@@ -33,6 +34,8 @@ export class LoginTeacherHandler implements ICommandHandler<
     private readonly userRepository: Repository<UserEntity>,
     @InjectRepository(RefreshTokenEntity)
     private readonly refreshTokenRepository: Repository<RefreshTokenEntity>,
+    @InjectRepository(SchoolEntity)
+    private readonly schoolRepository: Repository<SchoolEntity>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -71,6 +74,17 @@ export class LoginTeacherHandler implements ICommandHandler<
 
     if (user.role !== UserRole.TEACHER) {
       throw new UnauthorizedException('Access restricted to teacher accounts');
+    }
+
+    // Gates the trial itself (CONTEXT.md's "Trial" entry). In practice this
+    // never blocks a teacher — an admin can only create one after their own
+    // School is verified — but the check lives here too rather than assuming
+    // that invariant holds forever.
+    const school = await this.schoolRepository.findOneBy({ id: user.schoolId });
+    if (!school?.emailVerifiedAt) {
+      throw new UnauthorizedException(
+        'This school has not confirmed its email yet — ask your admin to check their inbox.',
+      );
     }
 
     const payload = { sub: user.id, role: user.role, schoolId: user.schoolId };

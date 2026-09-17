@@ -8,11 +8,13 @@ import { LoginAdminHandler } from '../../../src/auth/application/commands/login-
 import { LoginAdminCommand } from '../../../src/auth/application/commands/login-admin.command';
 import { UserEntity, UserRole } from '../../../src/shared/entities/user.entity';
 import { RefreshTokenEntity } from '../../../src/auth/infrastructure/entities/refresh-token.entity';
+import { SchoolEntity } from '../../../src/school/infrastructure/entities/school.entity';
 
 describe('LoginAdminHandler', () => {
   let handler: LoginAdminHandler;
   let userRepo: { findOne: jest.Mock };
   let refreshTokenRepo: { save: jest.Mock };
+  let schoolRepo: { findOneBy: jest.Mock };
   let jwtService: { sign: jest.Mock };
   let configService: { getOrThrow: jest.Mock };
 
@@ -20,15 +22,22 @@ describe('LoginAdminHandler', () => {
 
   const mockAdminUser = {
     id: 'admin-1',
+    schoolId: 'school-1',
     name: 'Admin',
     email: 'admin@example.com',
     passwordHash,
     role: UserRole.ADMIN,
+    mustChangePassword: false,
   };
 
   beforeEach(async () => {
     userRepo = { findOne: jest.fn() };
     refreshTokenRepo = { save: jest.fn() };
+    // Verified by default — most tests aren't about this gate at all; the
+    // one test that is overrides it explicitly.
+    schoolRepo = {
+      findOneBy: jest.fn().mockResolvedValue({ emailVerifiedAt: new Date() }),
+    };
     jwtService = { sign: jest.fn() };
     configService = { getOrThrow: jest.fn() };
 
@@ -40,6 +49,7 @@ describe('LoginAdminHandler', () => {
           provide: getRepositoryToken(RefreshTokenEntity),
           useValue: refreshTokenRepo,
         },
+        { provide: getRepositoryToken(SchoolEntity), useValue: schoolRepo },
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: configService },
       ],
@@ -90,6 +100,17 @@ describe('LoginAdminHandler', () => {
     );
   });
 
+  it("throws UnauthorizedException when the School's email is not verified", async () => {
+    userRepo.findOne.mockResolvedValue(mockAdminUser);
+    schoolRepo.findOneBy.mockResolvedValue({ emailVerifiedAt: null });
+    await expect(
+      handler.execute(
+        new LoginAdminCommand('admin@example.com', 'password123'),
+      ),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(refreshTokenRepo.save).not.toHaveBeenCalled();
+  });
+
   it('returns tokens and profile when user is ADMIN', async () => {
     userRepo.findOne.mockResolvedValue(mockAdminUser);
 
@@ -101,9 +122,11 @@ describe('LoginAdminHandler', () => {
     expect(result.refresh_token).toBe('refresh-token');
     expect(result.user).toEqual({
       id: 'admin-1',
+      schoolId: 'school-1',
       name: 'Admin',
       email: 'admin@example.com',
       role: UserRole.ADMIN,
+      mustChangePassword: false,
     });
     expect(refreshTokenRepo.save).toHaveBeenCalledTimes(1);
   });
