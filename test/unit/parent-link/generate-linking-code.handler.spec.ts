@@ -37,7 +37,7 @@ describe('GenerateLinkingCodeHandler', () => {
   it('throws NotFoundException when the student does not exist', async () => {
     studentRepo.findOneBy.mockResolvedValue(null);
     await expect(
-      handler.execute(new GenerateLinkingCodeCommand('missing')),
+      handler.execute(new GenerateLinkingCodeCommand('school-1', 'missing')),
     ).rejects.toThrow(NotFoundException);
   });
 
@@ -46,7 +46,7 @@ describe('GenerateLinkingCodeHandler', () => {
     const before = Date.now();
 
     const result = await handler.execute(
-      new GenerateLinkingCodeCommand('student-1'),
+      new GenerateLinkingCodeCommand('school-1', 'student-1'),
     );
 
     expect(result.studentId).toBe('student-1');

@@ -33,7 +33,7 @@ describe('ResetTeacherPasswordHandler', () => {
   it('throws NotFoundException for a missing teacher', async () => {
     userRepo.findOneBy.mockResolvedValue(null);
     await expect(
-      handler.execute(new ResetTeacherPasswordCommand('nope')),
+      handler.execute(new ResetTeacherPasswordCommand('school-1', 'nope')),
     ).rejects.toThrow(NotFoundException);
     expect(userRepo.update).not.toHaveBeenCalled();
     expect(refreshTokenRepo.delete).not.toHaveBeenCalled();
@@ -42,11 +42,12 @@ describe('ResetTeacherPasswordHandler', () => {
   it('scopes the lookup to teachers, so an admin cannot be reset this way', async () => {
     userRepo.findOneBy.mockResolvedValue(null);
     await expect(
-      handler.execute(new ResetTeacherPasswordCommand('admin-id')),
+      handler.execute(new ResetTeacherPasswordCommand('school-1', 'admin-id')),
     ).rejects.toThrow(NotFoundException);
     expect(userRepo.findOneBy).toHaveBeenCalledWith({
       id: 'admin-id',
       role: UserRole.TEACHER,
+      schoolId: 'school-1',
     });
   });
 
@@ -55,28 +56,37 @@ describe('ResetTeacherPasswordHandler', () => {
     userRepo.update.mockResolvedValue(undefined);
     refreshTokenRepo.delete.mockResolvedValue(undefined);
 
-    const result = await handler.execute(new ResetTeacherPasswordCommand('t1'));
+    const result = await handler.execute(
+      new ResetTeacherPasswordCommand('school-1', 't1'),
+    );
 
     expect(result.temporaryPassword).toHaveLength(12);
 
-    const [id, partial] = userRepo.update.mock.calls[0] as [
-      string,
+    const [where, partial] = userRepo.update.mock.calls[0] as [
+      Partial<UserEntity>,
       Partial<UserEntity>,
     ];
-    expect(id).toBe('t1');
+    expect(where).toEqual({ id: 't1', schoolId: 'school-1' });
     expect(partial.mustChangePassword).toBe(true);
     // The stored hash is of the password handed back, and only the hash is kept.
     expect(
       await bcrypt.compare(result.temporaryPassword, partial.passwordHash!),
     ).toBe(true);
 
-    expect(refreshTokenRepo.delete).toHaveBeenCalledWith({ userId: 't1' });
+    expect(refreshTokenRepo.delete).toHaveBeenCalledWith({
+      userId: 't1',
+      schoolId: 'school-1',
+    });
   });
 
   it('issues a different password each time', async () => {
     userRepo.findOneBy.mockResolvedValue({ id: 't1', role: UserRole.TEACHER });
-    const first = await handler.execute(new ResetTeacherPasswordCommand('t1'));
-    const second = await handler.execute(new ResetTeacherPasswordCommand('t1'));
+    const first = await handler.execute(
+      new ResetTeacherPasswordCommand('school-1', 't1'),
+    );
+    const second = await handler.execute(
+      new ResetTeacherPasswordCommand('school-1', 't1'),
+    );
     expect(first.temporaryPassword).not.toBe(second.temporaryPassword);
   });
 });

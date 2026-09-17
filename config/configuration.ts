@@ -26,9 +26,15 @@ const required = (name: string): string => {
 export default () => {
   const accessSecret = required('JWT_ACCESS_SECRET');
   const refreshSecret = required('JWT_REFRESH_SECRET');
+  // Its own secret, never shared with the School-scoped access/refresh pair —
+  // an Operator token verified against the wrong secret would just fail, but
+  // sharing a secret invites someone eventually reusing the signing call
+  // between the two paths, which is exactly the mistake ADR-0009 exists to
+  // rule out structurally.
+  const operatorSecret = required('JWT_OPERATOR_SECRET');
 
-  if (accessSecret === refreshSecret) {
-    throw new Error('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different');
+  if (new Set([accessSecret, refreshSecret, operatorSecret]).size !== 3) {
+    throw new Error('JWT_ACCESS_SECRET, JWT_REFRESH_SECRET and JWT_OPERATOR_SECRET must all be different');
   }
 
   const publicUrl = resolvePublicUrl();
@@ -51,6 +57,10 @@ export default () => {
     publicUrl,
     telegram: {
       botToken: process.env.TELEGRAM_BOT_TOKEN,
+      // One shared bot for every School (ADR-0007) — there is no per-school
+      // override any more, so the username is a deployment constant like the
+      // token itself, not something fetched and cached per row.
+      botUsername: process.env.TELEGRAM_BOT_USERNAME,
       webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
       /** Where Telegram should deliver updates, or null when this deployment
        *  is not publicly reachable and registration must be skipped. */
@@ -68,6 +78,7 @@ export default () => {
       accessExpiry: process.env.JWT_ACCESS_EXPIRY ?? '15m',
       refreshSecret,
       refreshExpiry: process.env.JWT_REFRESH_EXPIRY ?? '7d',
+      operatorSecret,
     },
   };
 };

@@ -4,6 +4,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../shared/guards/roles.guard';
 import { Roles } from '../../../shared/decorators/roles.decorator';
+import { CurrentSchoolId } from '../../../shared/decorators/current-school-id.decorator';
 import { UserRole } from '../../../shared/entities/user.entity';
 import { GenerateLinkingCodeDto } from '../dto/generate-linking-code.dto';
 import { GenerateLinkingCodeCommand } from '../../application/commands/generate-linking-code.command';
@@ -24,8 +25,8 @@ export class ParentLinksController {
     summary: 'List every student with linked/unlinked status (follow-up list)',
   })
   @Get('status')
-  status() {
-    return this.queryBus.execute(new GetLinkingStatusQuery());
+  status(@CurrentSchoolId() schoolId: string) {
+    return this.queryBus.execute(new GetLinkingStatusQuery(schoolId));
   }
 
   @ApiOperation({
@@ -33,9 +34,12 @@ export class ParentLinksController {
       'Generate a new linking code for a student, printable/shareable to a parent',
   })
   @Post('codes')
-  generateCode(@Body() dto: GenerateLinkingCodeDto) {
+  generateCode(
+    @CurrentSchoolId() schoolId: string,
+    @Body() dto: GenerateLinkingCodeDto,
+  ) {
     return this.commandBus.execute(
-      new GenerateLinkingCodeCommand(dto.student_id),
+      new GenerateLinkingCodeCommand(schoolId, dto.student_id),
     );
   }
 }

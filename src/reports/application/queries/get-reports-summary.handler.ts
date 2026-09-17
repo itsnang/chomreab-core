@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import {
   StudentEntity,
   StudentStatus,
@@ -67,15 +68,22 @@ export class GetReportsSummaryHandler implements IQueryHandler<
   ) {}
 
   async execute(query: GetReportsSummaryQuery): Promise<ReportsSummary> {
-    const { today } = query;
+    const { schoolId, today } = query;
     const start = windowStart(today);
+
+    const students_ = new ScopedRepository(this.studentRepository, schoolId);
+    const classrooms_ = new ScopedRepository(
+      this.classroomRepository,
+      schoolId,
+    );
+    const records_ = new ScopedRepository(this.recordRepository, schoolId);
 
     const [students, classrooms, windowRecords] = await Promise.all([
       // Students who have left are kept: their attendance in the window really
       // happened, and dropping them would rewrite history.
-      this.studentRepository.find(),
-      this.classroomRepository.find(),
-      this.recordRepository.find({ where: { date: Between(start, today) } }),
+      students_.find(),
+      classrooms_.find(),
+      records_.find({ where: { date: Between(start, today) } }),
     ]);
 
     const classroomById = new Map(classrooms.map((c) => [c.id, c]));

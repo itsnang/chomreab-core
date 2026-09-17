@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import { LinkingCodeEntity } from '../../../parent-link/infrastructure/entities/linking-code.entity';
 import { ParentLinkEntity } from '../../../parent-link/infrastructure/entities/parent-link.entity';
 import { StudentEntity } from '../../../student/infrastructure/entities/student.entity';
@@ -31,6 +32,13 @@ export class LinkParentHandler implements ICommandHandler<
   async execute(command: LinkParentCommand): Promise<void> {
     const { telegramChatId, code, chatType } = command;
 
+    // The one deliberate unscoped lookup in the whole codebase: a parent's
+    // /link CODE carries no school identifier, and with one shared bot there
+    // is no per-request "current school" the way a per-school bot token used
+    // to imply one. `code` stays globally unique (linking-code.entity.ts)
+    // specifically so this resolves unambiguously. Everything downstream —
+    // once linkingCode.schoolId is known — re-enters ScopedRepository
+    // discipline immediately.
     const linkingCode = await this.linkingCodeRepository.findOneBy({
       code: code.toUpperCase(),
     });
@@ -46,9 +54,16 @@ export class LinkParentHandler implements ICommandHandler<
       return;
     }
 
-    const student = await this.studentRepository.findOneBy({
-      id: linkingCode.studentId,
-    });
+    const students = new ScopedRepository(
+      this.studentRepository,
+      linkingCode.schoolId,
+    );
+    const parentLinks = new ScopedRepository(
+      this.parentLinkRepository,
+      linkingCode.schoolId,
+    );
+
+    const student = await students.findOneBy({ id: linkingCode.studentId });
     if (!student) {
       await this.telegram.sendMessage(
         telegramChatId,
@@ -57,13 +72,13 @@ export class LinkParentHandler implements ICommandHandler<
       return;
     }
 
-    const existingLink = await this.parentLinkRepository.findOneBy({
+    const existingLink = await parentLinks.findOneBy({
       studentId: student.id,
       telegramChatId,
     });
 
     if (!existingLink) {
-      await this.parentLinkRepository.save({
+      await parentLinks.save({
         id: crypto.randomUUID(),
         studentId: student.id,
         telegramChatId,

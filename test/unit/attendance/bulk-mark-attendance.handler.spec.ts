@@ -23,6 +23,7 @@ describe('BulkMarkAttendanceHandler', () => {
   it('dispatches one MarkAttendanceCommand per student', async () => {
     const result = await handler.execute(
       new BulkMarkAttendanceCommand(
+        'school-1',
         ['student-1', 'student-2'],
         'class-1',
         '2026-08-28',
@@ -36,6 +37,7 @@ describe('BulkMarkAttendanceHandler', () => {
     expect(commandBus.execute).toHaveBeenCalledWith(
       expect.objectContaining(
         new MarkAttendanceCommand(
+          'school-1',
           'student-1',
           'class-1',
           '2026-08-28',
@@ -50,6 +52,7 @@ describe('BulkMarkAttendanceHandler', () => {
   it('dispatches each per-student command via MarkAttendanceCommand, not duplicated upsert logic', async () => {
     await handler.execute(
       new BulkMarkAttendanceCommand(
+        'school-1',
         ['student-1', 'student-2', 'student-3'],
         'class-1',
         '2026-08-28',
@@ -88,6 +91,7 @@ describe('BulkMarkAttendanceHandler', () => {
 
     const result = await handler.execute(
       new BulkMarkAttendanceCommand(
+        'school-1',
         ['student-1', 'student-2'],
         'class-1',
         '2026-08-28',
@@ -105,6 +109,7 @@ describe('BulkMarkAttendanceHandler', () => {
   it('returns an empty array and dispatches nothing for an empty student list', async () => {
     const result = await handler.execute(
       new BulkMarkAttendanceCommand(
+        'school-1',
         [],
         'class-1',
         '2026-08-28',

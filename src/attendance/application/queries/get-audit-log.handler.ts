@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import { AttendanceAuditLogEntity } from '../../infrastructure/entities/attendance-audit-log.entity';
 import { AttendanceRecordEntity } from '../../infrastructure/entities/attendance-record.entity';
 import { StudentEntity } from '../../../student/infrastructure/entities/student.entity';
@@ -34,14 +35,22 @@ export class GetAuditLogHandler implements IQueryHandler<
   ) {}
 
   async execute(query: GetAuditLogQuery): Promise<AuditLogEntry[]> {
-    const records = await this.recordRepository.find({
+    const records = new ScopedRepository(this.recordRepository, query.schoolId);
+    const audit = new ScopedRepository(this.auditRepository, query.schoolId);
+    const students = new ScopedRepository(
+      this.studentRepository,
+      query.schoolId,
+    );
+    const users = new ScopedRepository(this.userRepository, query.schoolId);
+
+    const matchingRecords = await records.find({
       where: { classroomId: query.classroomId, date: query.date },
     });
-    if (records.length === 0) return [];
+    if (matchingRecords.length === 0) return [];
 
-    const recordById = new Map(records.map((r) => [r.id, r]));
-    const entries = await this.auditRepository.find({
-      where: { attendanceRecordId: In(records.map((r) => r.id)) },
+    const recordById = new Map(matchingRecords.map((r) => [r.id, r]));
+    const entries = await audit.find({
+      where: { attendanceRecordId: In(matchingRecords.map((r) => r.id)) },
       order: { changedAt: 'DESC' },
     });
     if (entries.length === 0) return [];
@@ -54,12 +63,12 @@ export class GetAuditLogHandler implements IQueryHandler<
       ),
     ];
     const userIds = [...new Set(entries.map((e) => e.changedByUserId))];
-    const [students, users] = await Promise.all([
-      this.studentRepository.find({ where: { id: In(studentIds) } }),
-      this.userRepository.find({ where: { id: In(userIds) } }),
+    const [studentRows, userRows] = await Promise.all([
+      students.find({ where: { id: In(studentIds) } }),
+      users.find({ where: { id: In(userIds) } }),
     ]);
-    const studentById = new Map(students.map((s) => [s.id, s]));
-    const userById = new Map(users.map((u) => [u.id, u]));
+    const studentById = new Map(studentRows.map((s) => [s.id, s]));
+    const userById = new Map(userRows.map((u) => [u.id, u]));
 
     return entries.map((e) => {
       const record = recordById.get(e.attendanceRecordId);

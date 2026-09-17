@@ -6,24 +6,19 @@ import { GetSchoolSettingsQuery } from '../../../src/school-settings/application
 import { UpdateSchoolSettingsHandler } from '../../../src/school-settings/application/commands/update-school-settings.handler';
 import { UpdateSchoolSettingsCommand } from '../../../src/school-settings/application/commands/update-school-settings.command';
 import { SchoolSettingsService } from '../../../src/school-settings/application/services/school-settings.service';
-import { TELEGRAM_BOT_ADMIN_SERVICE } from '../../../src/school-settings/application/interfaces/telegram-bot-admin.service';
-import {
-  SCHOOL_SETTINGS_ID,
-  SchoolSettingsEntity,
-} from '../../../src/school-settings/infrastructure/entities/school-settings.entity';
+import { SchoolSettingsEntity } from '../../../src/school-settings/infrastructure/entities/school-settings.entity';
 
+// `SchoolSettingsEntity` carries no Telegram fields any more — every School
+// shares one bot (ADR-0007) — and its primary key is `schoolId` itself, not
+// a generated id, since the relationship is exactly 1:1. These tests cover
+// what's left: the upsert-on-first-read behaviour, that a read/write is
+// scoped to the calling School, and the absence-template fallback.
 describe('School settings', () => {
   let getHandler: GetSchoolSettingsHandler;
   let updateHandler: UpdateSchoolSettingsHandler;
   let service: SchoolSettingsService;
   let repo: { create: jest.Mock; save: jest.Mock; findOneBy: jest.Mock };
   let configService: { get: jest.Mock };
-  let telegramBotAdmin: {
-    getUsername: jest.Mock;
-    setWebhook: jest.Mock;
-    deleteWebhook: jest.Mock;
-    getWebhookInfo: jest.Mock;
-  };
 
   beforeEach(async () => {
     repo = {
@@ -34,15 +29,6 @@ describe('School settings', () => {
       findOneBy: jest.fn(),
     };
     configService = { get: jest.fn() };
-    // `configService.get` returns undefined here, so no public URL resolves
-    // and these tests exercise the skip-registration path — which is what the
-    // token-preservation rules below are actually about.
-    telegramBotAdmin = {
-      getUsername: jest.fn(),
-      setWebhook: jest.fn().mockResolvedValue({ ok: true }),
-      deleteWebhook: jest.fn().mockResolvedValue({ ok: true }),
-      getWebhookInfo: jest.fn(),
-    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -51,10 +37,6 @@ describe('School settings', () => {
         SchoolSettingsService,
         { provide: getRepositoryToken(SchoolSettingsEntity), useValue: repo },
         { provide: ConfigService, useValue: configService },
-        {
-          provide: TELEGRAM_BOT_ADMIN_SERVICE,
-          useValue: telegramBotAdmin,
-        },
       ],
     }).compile();
 
@@ -63,220 +45,74 @@ describe('School settings', () => {
     service = module.get(SchoolSettingsService);
   });
 
-  it('creates default settings on first read', async () => {
+  it('creates default settings on first read, keyed by schoolId', async () => {
     repo.findOneBy.mockResolvedValue(null);
-    const result = await getHandler.execute(new GetSchoolSettingsQuery());
-    expect(result.id).toBe(SCHOOL_SETTINGS_ID);
+    const result = await getHandler.execute(
+      new GetSchoolSettingsQuery('school-1'),
+    );
+    expect(result.schoolId).toBe('school-1');
     expect(repo.save).toHaveBeenCalledTimes(1);
   });
 
   it('returns existing settings without re-saving', async () => {
     repo.findOneBy.mockResolvedValue({
-      id: SCHOOL_SETTINGS_ID,
+      schoolId: 'school-1',
       schoolName: 'Existing',
     });
-    const result = await getHandler.execute(new GetSchoolSettingsQuery());
+    const result = await getHandler.execute(
+      new GetSchoolSettingsQuery('school-1'),
+    );
     expect(result.schoolName).toBe('Existing');
     expect(repo.save).not.toHaveBeenCalled();
   });
 
-  it('updates settings', async () => {
+  it('reads scoped to the calling School, not any other', async () => {
     repo.findOneBy.mockResolvedValue(null);
+    await getHandler.execute(new GetSchoolSettingsQuery('school-2'));
+    expect(repo.findOneBy).toHaveBeenCalledWith({ schoolId: 'school-2' });
+  });
+
+  it('updates settings for the calling School', async () => {
     const result = await updateHandler.execute(
       new UpdateSchoolSettingsCommand(
+        'school-1',
         'New School',
         20,
         'Absent: {{student_name}}',
-        null,
       ),
     );
     expect(result.schoolName).toBe('New School');
     expect(result.lateCutoffMinutes).toBe(20);
+    expect(result.schoolId).toBe('school-1');
   });
 
-  it('preserves the existing bot token when none is provided in the update', async () => {
-    repo.findOneBy.mockResolvedValue({
-      id: SCHOOL_SETTINGS_ID,
-      telegramBotToken: 'existing-token',
-    });
-    const result = await updateHandler.execute(
-      new UpdateSchoolSettingsCommand(
-        'New School',
-        20,
-        'Absent: {{student_name}}',
-        null,
-      ),
-    );
-    expect(result.telegramBotToken).toBe('existing-token');
-  });
-
-  it('overwrites the bot token when a new one is provided', async () => {
-    repo.findOneBy.mockResolvedValue({
-      id: SCHOOL_SETTINGS_ID,
-      telegramBotToken: 'old-token',
-    });
-    const result = await updateHandler.execute(
-      new UpdateSchoolSettingsCommand(
-        'New School',
-        20,
-        'Absent: {{student_name}}',
-        'new-token',
-      ),
-    );
-    expect(result.telegramBotToken).toBe('new-token');
-  });
-
-  it('falls back to the env var when no bot token override is saved', async () => {
-    repo.findOneBy.mockResolvedValue({
-      id: SCHOOL_SETTINGS_ID,
-      telegramBotToken: null,
-    });
+  it('resolves the shared bot token from config, not per-school storage', () => {
     configService.get.mockReturnValue('env-token');
-    const token = await service.getEffectiveBotToken();
+    const token = service.getEffectiveBotToken();
     expect(token).toBe('env-token');
+    expect(configService.get).toHaveBeenCalledWith('telegram.botToken');
   });
 
-  it('prefers the saved bot token override over the env var', async () => {
-    repo.findOneBy.mockResolvedValue({
-      id: SCHOOL_SETTINGS_ID,
-      telegramBotToken: 'db-token',
-    });
-    const token = await service.getEffectiveBotToken();
-    expect(token).toBe('db-token');
+  it('resolves the shared bot username from config', () => {
+    configService.get.mockReturnValue('chomreabbot');
+    const username = service.getBotUsername();
+    expect(username).toBe('chomreabbot');
+    expect(configService.get).toHaveBeenCalledWith('telegram.botUsername');
   });
 
   it('returns the default absence template when settings have never been saved', async () => {
     repo.findOneBy.mockResolvedValue(null);
-    const template = await service.getAbsenceTemplate();
+    const template = await service.getAbsenceTemplate('school-1');
     expect(template).toContain('{{student_name}}');
   });
 
-  it('preserves the existing bot token when an empty string is provided in the update', async () => {
+  it("returns a School's own saved absence template, not another School's", async () => {
     repo.findOneBy.mockResolvedValue({
-      id: SCHOOL_SETTINGS_ID,
-      telegramBotToken: 'existing-token',
+      schoolId: 'school-1',
+      absenceMessageTemplate: 'Custom: {{student_name}}',
     });
-    const result = await updateHandler.execute(
-      new UpdateSchoolSettingsCommand(
-        'New School',
-        20,
-        'Absent: {{student_name}}',
-        '',
-      ),
-    );
-    expect(result.telegramBotToken).toBe('existing-token');
-  });
-
-  it('preserves the existing bot token when a whitespace-only string is provided in the update', async () => {
-    repo.findOneBy.mockResolvedValue({
-      id: SCHOOL_SETTINGS_ID,
-      telegramBotToken: 'existing-token',
-    });
-    const result = await updateHandler.execute(
-      new UpdateSchoolSettingsCommand(
-        'New School',
-        20,
-        'Absent: {{student_name}}',
-        '  \t  ',
-      ),
-    );
-    expect(result.telegramBotToken).toBe('existing-token');
-  });
-
-  it('returns the cached bot username', async () => {
-    repo.findOneBy.mockResolvedValue({
-      id: SCHOOL_SETTINGS_ID,
-      telegramBotUsername: 'chomreabbot',
-    });
-    const username = await service.getBotUsername();
-    expect(username).toBe('chomreabbot');
-  });
-
-  it('returns null when no username has ever been cached', async () => {
-    repo.findOneBy.mockResolvedValue(null);
-    const username = await service.getBotUsername();
-    expect(username).toBeNull();
-  });
-
-  it('fetches and caches the username when a new token is saved', async () => {
-    repo.findOneBy.mockResolvedValue({
-      id: SCHOOL_SETTINGS_ID,
-      telegramBotToken: 'old-token',
-      telegramBotUsername: 'old_bot',
-    });
-    telegramBotAdmin.getUsername.mockResolvedValue('new_bot');
-
-    const result = await updateHandler.execute(
-      new UpdateSchoolSettingsCommand(
-        'New School',
-        20,
-        'Absent: {{student_name}}',
-        'new-token',
-      ),
-    );
-
-    expect(telegramBotAdmin.getUsername).toHaveBeenCalledWith('new-token');
-    expect(result.telegramBotUsername).toBe('new_bot');
-  });
-
-  it('does not call Telegram when the token is unchanged', async () => {
-    repo.findOneBy.mockResolvedValue({
-      id: SCHOOL_SETTINGS_ID,
-      telegramBotToken: 'same-token',
-      telegramBotUsername: 'same_bot',
-    });
-
-    const result = await updateHandler.execute(
-      new UpdateSchoolSettingsCommand(
-        'New School',
-        20,
-        'Absent: {{student_name}}',
-        'same-token',
-      ),
-    );
-
-    expect(telegramBotAdmin.getUsername).not.toHaveBeenCalled();
-    expect(result.telegramBotUsername).toBe('same_bot');
-  });
-
-  it('does not call Telegram when the token is left unspecified', async () => {
-    repo.findOneBy.mockResolvedValue({
-      id: SCHOOL_SETTINGS_ID,
-      telegramBotToken: 'existing-token',
-      telegramBotUsername: 'existing_bot',
-    });
-
-    const result = await updateHandler.execute(
-      new UpdateSchoolSettingsCommand(
-        'New School',
-        20,
-        'Absent: {{student_name}}',
-        null,
-      ),
-    );
-
-    expect(telegramBotAdmin.getUsername).not.toHaveBeenCalled();
-    expect(result.telegramBotUsername).toBe('existing_bot');
-  });
-
-  it('keeps the previously cached username when the getMe lookup fails', async () => {
-    repo.findOneBy.mockResolvedValue({
-      id: SCHOOL_SETTINGS_ID,
-      telegramBotToken: 'old-token',
-      telegramBotUsername: 'old_bot',
-    });
-    telegramBotAdmin.getUsername.mockResolvedValue(null);
-
-    const result = await updateHandler.execute(
-      new UpdateSchoolSettingsCommand(
-        'New School',
-        20,
-        'Absent: {{student_name}}',
-        'bad-token',
-      ),
-    );
-
-    expect(result.telegramBotToken).toBe('bad-token');
-    expect(result.telegramBotUsername).toBe('old_bot');
+    const template = await service.getAbsenceTemplate('school-1');
+    expect(template).toBe('Custom: {{student_name}}');
+    expect(repo.findOneBy).toHaveBeenCalledWith({ schoolId: 'school-1' });
   });
 });

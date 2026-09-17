@@ -1,19 +1,33 @@
-import { Column, CreateDateColumn, Entity, PrimaryColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryColumn,
+} from 'typeorm';
 
 export enum UserRole {
   ADMIN = 'admin',
   TEACHER = 'teacher',
 }
 
+/** Email is unique per School, not globally — the same address may be an
+ *  admin at one School and a teacher at another, each a separate account.
+ *  See CONTEXT.md's "Admin"/"Teacher" entries: one School per user, no
+ *  cross-school membership. */
 @Entity('users')
+@Index(['schoolId', 'email'], { unique: true })
 export class UserEntity {
   @PrimaryColumn('uuid')
   id: string;
 
+  @Column({ type: 'uuid' })
+  schoolId: string;
+
   @Column()
   name: string;
 
-  @Column({ unique: true })
+  @Column()
   email: string;
 
   @Column({ select: false })

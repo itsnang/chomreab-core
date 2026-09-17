@@ -19,6 +19,7 @@ import {
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../shared/guards/roles.guard';
 import { Roles } from '../../../shared/decorators/roles.decorator';
+import { CurrentSchoolId } from '../../../shared/decorators/current-school-id.decorator';
 import { UserRole } from '../../../shared/entities/user.entity';
 import { CreateTeacherDto } from '../dto/create-teacher.dto';
 import { UpdateTeacherDto } from '../dto/update-teacher.dto';
@@ -43,17 +44,17 @@ export class StaffController {
     summary: 'List teacher accounts with their assigned classrooms',
   })
   @Get()
-  list() {
-    return this.queryBus.execute(new GetTeachersQuery());
+  list(@CurrentSchoolId() schoolId: string) {
+    return this.queryBus.execute(new GetTeachersQuery(schoolId));
   }
 
   @ApiOperation({
     summary: 'Create a teacher account, returns a one-time temporary password',
   })
   @Post()
-  create(@Body() dto: CreateTeacherDto) {
+  create(@CurrentSchoolId() schoolId: string, @Body() dto: CreateTeacherDto) {
     return this.commandBus.execute(
-      new CreateTeacherCommand(dto.name, dto.email),
+      new CreateTeacherCommand(schoolId, dto.name, dto.email),
     );
   }
 
@@ -61,9 +62,13 @@ export class StaffController {
   @ApiResponse({ status: 404, description: 'Teacher not found' })
   @ApiResponse({ status: 409, description: 'Email already in use' })
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateTeacherDto) {
+  update(
+    @CurrentSchoolId() schoolId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateTeacherDto,
+  ) {
     return this.commandBus.execute(
-      new UpdateTeacherCommand(id, dto.name, dto.email),
+      new UpdateTeacherCommand(schoolId, id, dto.name, dto.email),
     );
   }
 
@@ -75,13 +80,15 @@ export class StaffController {
   @ApiResponse({ status: 404, description: 'Teacher not found' })
   @HttpCode(200)
   @Post(':id/reset-password')
-  resetPassword(@Param('id') id: string) {
-    return this.commandBus.execute(new ResetTeacherPasswordCommand(id));
+  resetPassword(@CurrentSchoolId() schoolId: string, @Param('id') id: string) {
+    return this.commandBus.execute(
+      new ResetTeacherPasswordCommand(schoolId, id),
+    );
   }
 
   @ApiOperation({ summary: 'Remove a teacher account' })
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.commandBus.execute(new DeleteTeacherCommand(id));
+  remove(@CurrentSchoolId() schoolId: string, @Param('id') id: string) {
+    return this.commandBus.execute(new DeleteTeacherCommand(schoolId, id));
   }
 }

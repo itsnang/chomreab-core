@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../shared/guards/roles.guard';
 import { Roles } from '../../../shared/decorators/roles.decorator';
+import { CurrentSchoolId } from '../../../shared/decorators/current-school-id.decorator';
 import { UserRole } from '../../../shared/entities/user.entity';
 import { CreateClassroomDto } from '../dto/create-classroom.dto';
 import { UpdateClassroomDto } from '../dto/update-classroom.dto';
@@ -35,23 +36,24 @@ export class ClassroomsController {
   @ApiOperation({ summary: 'List all classrooms' })
   @Roles(UserRole.ADMIN, UserRole.TEACHER)
   @Get()
-  list() {
-    return this.queryBus.execute(new GetClassroomsQuery());
+  list(@CurrentSchoolId() schoolId: string) {
+    return this.queryBus.execute(new GetClassroomsQuery(schoolId));
   }
 
   @ApiOperation({ summary: 'Get one classroom' })
   @Roles(UserRole.ADMIN, UserRole.TEACHER)
   @Get(':id')
-  get(@Param('id') id: string) {
-    return this.queryBus.execute(new GetClassroomQuery(id));
+  get(@CurrentSchoolId() schoolId: string, @Param('id') id: string) {
+    return this.queryBus.execute(new GetClassroomQuery(schoolId, id));
   }
 
   @ApiOperation({ summary: 'Create a classroom (admin only)' })
   @Roles(UserRole.ADMIN)
   @Post()
-  create(@Body() dto: CreateClassroomDto) {
+  create(@CurrentSchoolId() schoolId: string, @Body() dto: CreateClassroomDto) {
     return this.commandBus.execute(
       new CreateClassroomCommand(
+        schoolId,
         dto.name,
         dto.grade_label ?? null,
         dto.teacher_id ?? null,
@@ -62,16 +64,26 @@ export class ClassroomsController {
   @ApiOperation({ summary: 'Update a classroom (admin only)' })
   @Roles(UserRole.ADMIN)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateClassroomDto) {
+  update(
+    @CurrentSchoolId() schoolId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateClassroomDto,
+  ) {
     return this.commandBus.execute(
-      new UpdateClassroomCommand(id, dto.name, dto.grade_label, dto.teacher_id),
+      new UpdateClassroomCommand(
+        schoolId,
+        id,
+        dto.name,
+        dto.grade_label,
+        dto.teacher_id,
+      ),
     );
   }
 
   @ApiOperation({ summary: 'Delete a classroom (admin only)' })
   @Roles(UserRole.ADMIN)
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.commandBus.execute(new DeleteClassroomCommand(id));
+  remove(@CurrentSchoolId() schoolId: string, @Param('id') id: string) {
+    return this.commandBus.execute(new DeleteClassroomCommand(schoolId, id));
   }
 }

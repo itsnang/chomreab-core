@@ -44,7 +44,7 @@ describe('Student command handlers', () => {
 
   it('creates a student', async () => {
     const result = await createHandler.execute(
-      new CreateStudentCommand('Sokha', 'classroom-1'),
+      new CreateStudentCommand('school-1', 'Sokha', 'classroom-1'),
     );
     expect(result.name).toBe('Sokha');
     expect(repo.save).toHaveBeenCalledTimes(1);
@@ -58,7 +58,7 @@ describe('Student command handlers', () => {
       status: 'active',
     });
     const result = await updateHandler.execute(
-      new UpdateStudentCommand('1', 'New Name'),
+      new UpdateStudentCommand('school-1', '1', 'New Name'),
     );
     expect(result.name).toBe('New Name');
   });
@@ -66,21 +66,23 @@ describe('Student command handlers', () => {
   it('throws NotFoundException updating a missing student', async () => {
     repo.findOneBy.mockResolvedValue(null);
     await expect(
-      updateHandler.execute(new UpdateStudentCommand('missing', 'X')),
+      updateHandler.execute(
+        new UpdateStudentCommand('school-1', 'missing', 'X'),
+      ),
     ).rejects.toThrow(NotFoundException);
   });
 
   it('deletes an existing student', async () => {
     repo.delete.mockResolvedValue({ affected: 1 });
     await expect(
-      deleteHandler.execute(new DeleteStudentCommand('1')),
+      deleteHandler.execute(new DeleteStudentCommand('school-1', '1')),
     ).resolves.toBeUndefined();
   });
 
   it('throws NotFoundException deleting a missing student', async () => {
     repo.delete.mockResolvedValue({ affected: 0 });
     await expect(
-      deleteHandler.execute(new DeleteStudentCommand('missing')),
+      deleteHandler.execute(new DeleteStudentCommand('school-1', 'missing')),
     ).rejects.toThrow(NotFoundException);
   });
 });

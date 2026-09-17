@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import {
   StudentEntity,
   StudentStatus,
@@ -20,10 +21,14 @@ export class GetStudentsHandler implements IQueryHandler<
   ) {}
 
   execute(query: GetStudentsQuery): Promise<StudentEntity[]> {
-    const where: FindOptionsWhere<StudentEntity> = {};
+    const students = new ScopedRepository(
+      this.studentRepository,
+      query.schoolId,
+    );
+    const where: Omit<FindOptionsWhere<StudentEntity>, 'schoolId'> = {};
     if (query.classroomId) where.classroomId = query.classroomId;
     if (!query.includeInactive) where.status = StudentStatus.ACTIVE;
 
-    return this.studentRepository.find({ where, order: { name: 'ASC' } });
+    return students.find({ where, order: { name: 'ASC' } });
   }
 }

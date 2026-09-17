@@ -28,42 +28,50 @@ describe('Student query handlers', () => {
 
   it('lists active students ordered by name', async () => {
     repo.find.mockResolvedValue([{ id: '1', name: 'A' }]);
-    const result = await listHandler.execute(new GetStudentsQuery());
+    const result = await listHandler.execute(new GetStudentsQuery('school-1'));
     expect(result).toHaveLength(1);
     expect(repo.find).toHaveBeenCalledWith({
-      where: { status: StudentStatus.ACTIVE },
+      where: { status: StudentStatus.ACTIVE, schoolId: 'school-1' },
       order: { name: 'ASC' },
     });
   });
 
   it('filters by classroom_id when provided', async () => {
     repo.find.mockResolvedValue([]);
-    await listHandler.execute(new GetStudentsQuery('classroom-1'));
+    await listHandler.execute(new GetStudentsQuery('school-1', 'classroom-1'));
     expect(repo.find).toHaveBeenCalledWith({
-      where: { classroomId: 'classroom-1', status: StudentStatus.ACTIVE },
+      where: {
+        classroomId: 'classroom-1',
+        status: StudentStatus.ACTIVE,
+        schoolId: 'school-1',
+      },
       order: { name: 'ASC' },
     });
   });
 
   it('includes students who have left when asked to', async () => {
     repo.find.mockResolvedValue([]);
-    await listHandler.execute(new GetStudentsQuery(undefined, true));
+    await listHandler.execute(
+      new GetStudentsQuery('school-1', undefined, true),
+    );
     expect(repo.find).toHaveBeenCalledWith({
-      where: {},
+      where: { schoolId: 'school-1' },
       order: { name: 'ASC' },
     });
   });
 
   it('returns a single student', async () => {
     repo.findOneBy.mockResolvedValue({ id: '1', name: 'A' });
-    const result = await getHandler.execute(new GetStudentQuery('1'));
+    const result = await getHandler.execute(
+      new GetStudentQuery('school-1', '1'),
+    );
     expect(result.id).toBe('1');
   });
 
   it('throws NotFoundException for a missing student', async () => {
     repo.findOneBy.mockResolvedValue(null);
     await expect(
-      getHandler.execute(new GetStudentQuery('missing')),
+      getHandler.execute(new GetStudentQuery('school-1', 'missing')),
     ).rejects.toThrow(NotFoundException);
   });
 });

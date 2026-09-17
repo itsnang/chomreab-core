@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import { ClassroomEntity } from '../../../classroom/infrastructure/entities/classroom.entity';
 import {
   StudentEntity,
@@ -34,7 +35,20 @@ export class GetMyClassesTodayHandler implements IQueryHandler<
   ) {}
 
   async execute(query: GetMyClassesTodayQuery): Promise<MyClassSummary[]> {
-    const classrooms = await this.classroomRepository.find({
+    const classroomRepo = new ScopedRepository(
+      this.classroomRepository,
+      query.schoolId,
+    );
+    const studentRepo = new ScopedRepository(
+      this.studentRepository,
+      query.schoolId,
+    );
+    const recordRepo = new ScopedRepository(
+      this.recordRepository,
+      query.schoolId,
+    );
+
+    const classrooms = await classroomRepo.find({
       where: { teacherId: query.teacherId },
       order: { name: 'ASC' },
     });
@@ -44,10 +58,10 @@ export class GetMyClassesTodayHandler implements IQueryHandler<
     const [students, records] = await Promise.all([
       // Deactivated students are off the roster, so they must not inflate
       // studentCount or leave a class permanently "N left".
-      this.studentRepository.find({
+      studentRepo.find({
         where: { classroomId: In(classroomIds), status: StudentStatus.ACTIVE },
       }),
-      this.recordRepository.find({
+      recordRepo.find({
         where: { date: query.date, classroomId: In(classroomIds) },
       }),
     ]);

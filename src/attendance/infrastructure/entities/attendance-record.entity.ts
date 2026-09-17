@@ -20,6 +20,9 @@ export class AttendanceRecordEntity {
   id: string;
 
   @Column({ type: 'uuid' })
+  schoolId: string;
+
+  @Column({ type: 'uuid' })
   studentId: string;
 
   @Column({ type: 'uuid' })

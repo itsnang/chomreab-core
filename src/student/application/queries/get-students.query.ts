@@ -1,5 +1,6 @@
 export class GetStudentsQuery {
   constructor(
+    public readonly schoolId: string,
     public readonly classroomId?: string,
     /** Admin screens opt in to show students who have left; everything else
      *  sees only the active roll. */

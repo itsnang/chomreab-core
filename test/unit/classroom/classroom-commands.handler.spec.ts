@@ -44,7 +44,7 @@ describe('Classroom command handlers', () => {
 
   it('creates a classroom', async () => {
     const result = await createHandler.execute(
-      new CreateClassroomCommand('Grade 3A', 'Grade 3', null),
+      new CreateClassroomCommand('school-1', 'Grade 3A', 'Grade 3', null),
     );
     expect(result.name).toBe('Grade 3A');
     expect(repo.save).toHaveBeenCalledTimes(1);
@@ -58,7 +58,7 @@ describe('Classroom command handlers', () => {
       teacherId: null,
     });
     const result = await updateHandler.execute(
-      new UpdateClassroomCommand('1', 'New Name'),
+      new UpdateClassroomCommand('school-1', '1', 'New Name'),
     );
     expect(result.name).toBe('New Name');
   });
@@ -66,21 +66,23 @@ describe('Classroom command handlers', () => {
   it('throws NotFoundException updating a missing classroom', async () => {
     repo.findOneBy.mockResolvedValue(null);
     await expect(
-      updateHandler.execute(new UpdateClassroomCommand('missing', 'X')),
+      updateHandler.execute(
+        new UpdateClassroomCommand('school-1', 'missing', 'X'),
+      ),
     ).rejects.toThrow(NotFoundException);
   });
 
   it('deletes an existing classroom', async () => {
     repo.delete.mockResolvedValue({ affected: 1 });
     await expect(
-      deleteHandler.execute(new DeleteClassroomCommand('1')),
+      deleteHandler.execute(new DeleteClassroomCommand('school-1', '1')),
     ).resolves.toBeUndefined();
   });
 
   it('throws NotFoundException deleting a missing classroom', async () => {
     repo.delete.mockResolvedValue({ affected: 0 });
     await expect(
-      deleteHandler.execute(new DeleteClassroomCommand('missing')),
+      deleteHandler.execute(new DeleteClassroomCommand('school-1', 'missing')),
     ).rejects.toThrow(NotFoundException);
   });
 });

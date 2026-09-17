@@ -3,6 +3,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import { StudentEntity } from '../../../student/infrastructure/entities/student.entity';
 import { LinkingCodeEntity } from '../../infrastructure/entities/linking-code.entity';
 import { GenerateLinkingCodeCommand } from './generate-linking-code.command';
@@ -35,9 +36,14 @@ export class GenerateLinkingCodeHandler implements ICommandHandler<
   async execute(
     command: GenerateLinkingCodeCommand,
   ): Promise<LinkingCodeEntity> {
-    const student = await this.studentRepository.findOneBy({
-      id: command.studentId,
-    });
+    const students = new ScopedRepository(
+      this.studentRepository,
+      command.schoolId,
+    );
+    // `code` stays globally unique across every School (linking-code.entity.ts),
+    // so this write is the one deliberate exception that does not go through
+    // ScopedRepository — everything else about the row is still scoped.
+    const student = await students.findOneBy({ id: command.studentId });
     if (!student) {
       throw new NotFoundException('Student not found');
     }
@@ -45,6 +51,7 @@ export class GenerateLinkingCodeHandler implements ICommandHandler<
     const expiresAt = new Date(Date.now() + EXPIRY_DAYS * 24 * 60 * 60 * 1000);
     const linkingCode = this.linkingCodeRepository.create({
       id: crypto.randomUUID(),
+      schoolId: command.schoolId,
       studentId: command.studentId,
       code: generateCode(),
       expiresAt,

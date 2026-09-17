@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import {
   DEFAULT_SCHOOL_SETTINGS,
-  SCHOOL_SETTINGS_ID,
   SchoolSettingsEntity,
 } from '../../infrastructure/entities/school-settings.entity';
 import { GetSchoolSettingsQuery } from './get-school-settings.query';
@@ -20,16 +20,10 @@ export class GetSchoolSettingsHandler implements IQueryHandler<
     private readonly repository: Repository<SchoolSettingsEntity>,
   ) {}
 
-  async execute(_query: GetSchoolSettingsQuery): Promise<SchoolSettingsEntity> {
-    const existing = await this.repository.findOneBy({
-      id: SCHOOL_SETTINGS_ID,
-    });
+  async execute(query: GetSchoolSettingsQuery): Promise<SchoolSettingsEntity> {
+    const settings = new ScopedRepository(this.repository, query.schoolId);
+    const existing = await settings.findOneBy({});
     if (existing) return existing;
-    return this.repository.save(
-      this.repository.create({
-        id: SCHOOL_SETTINGS_ID,
-        ...DEFAULT_SCHOOL_SETTINGS,
-      }),
-    );
+    return settings.save(settings.create({ ...DEFAULT_SCHOOL_SETTINGS }));
   }
 }

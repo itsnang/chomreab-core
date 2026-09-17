@@ -13,6 +13,7 @@ import { RefreshTokenCommand } from './refresh-token.command';
 interface JwtPayload {
   sub: string;
   role: UserRole;
+  schoolId: string;
 }
 
 interface RefreshTokenResult {
@@ -48,7 +49,11 @@ export class RefreshTokenHandler implements ICommandHandler<
     }
 
     const storedTokens = await this.refreshTokenRepository.find({
-      where: { userId: payload.sub, expiresAt: MoreThan(new Date()) },
+      where: {
+        schoolId: payload.schoolId,
+        userId: payload.sub,
+        expiresAt: MoreThan(new Date()),
+      },
     });
 
     let matched: RefreshTokenEntity | null = null;
@@ -72,7 +77,11 @@ export class RefreshTokenHandler implements ICommandHandler<
     const refreshExpiry =
       this.configService.getOrThrow<string>('jwt.refreshExpiry');
 
-    const tokenPayload = { sub: payload.sub, role: payload.role };
+    const tokenPayload = {
+      sub: payload.sub,
+      role: payload.role,
+      schoolId: payload.schoolId,
+    };
 
     const newAccessToken = this.jwtService.sign(tokenPayload, {
       secret: accessSecret,
@@ -90,6 +99,7 @@ export class RefreshTokenHandler implements ICommandHandler<
 
     await this.refreshTokenRepository.save({
       id: crypto.randomUUID(),
+      schoolId: payload.schoolId,
       tokenHash,
       userId: payload.sub,
       expiresAt,
