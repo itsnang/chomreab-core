@@ -6,13 +6,18 @@ const NAMES = ['Sokha', 'Dara'];
 
 export async function seedStudents(
   dataSource: DataSource,
+  schoolId: string,
   classroom: ClassroomEntity,
 ): Promise<StudentEntity[]> {
   const repo: Repository<StudentEntity> = dataSource.getRepository(StudentEntity);
   const results: StudentEntity[] = [];
 
   for (const name of NAMES) {
-    const existing = await repo.findOneBy({ name, classroomId: classroom.id });
+    const existing = await repo.findOneBy({
+      name,
+      classroomId: classroom.id,
+      schoolId,
+    });
     if (existing) {
       console.log(`  [skip] student "${name}" already exists`);
       results.push(existing);
@@ -20,6 +25,7 @@ export async function seedStudents(
     }
     const student = repo.create({
       id: crypto.randomUUID(),
+      schoolId,
       name,
       classroomId: classroom.id,
       status: StudentStatus.ACTIVE,
