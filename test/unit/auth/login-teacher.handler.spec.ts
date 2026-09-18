@@ -8,11 +8,13 @@ import { LoginTeacherHandler } from '../../../src/auth/application/commands/logi
 import { LoginTeacherCommand } from '../../../src/auth/application/commands/login-teacher.command';
 import { UserEntity, UserRole } from '../../../src/shared/entities/user.entity';
 import { RefreshTokenEntity } from '../../../src/auth/infrastructure/entities/refresh-token.entity';
+import { SchoolEntity } from '../../../src/school/infrastructure/entities/school.entity';
 
 describe('LoginTeacherHandler', () => {
   let handler: LoginTeacherHandler;
   let userRepo: { findOne: jest.Mock };
   let refreshTokenRepo: { save: jest.Mock };
+  let schoolRepo: { findOneBy: jest.Mock };
   let jwtService: { sign: jest.Mock };
   let configService: { getOrThrow: jest.Mock };
 
@@ -20,15 +22,20 @@ describe('LoginTeacherHandler', () => {
 
   const mockTeacherUser = {
     id: 'teacher-1',
+    schoolId: 'school-1',
     name: 'Teacher',
     email: 'teacher@example.com',
     passwordHash,
     role: UserRole.TEACHER,
+    mustChangePassword: false,
   };
 
   beforeEach(async () => {
     userRepo = { findOne: jest.fn() };
     refreshTokenRepo = { save: jest.fn() };
+    schoolRepo = {
+      findOneBy: jest.fn().mockResolvedValue({ emailVerifiedAt: new Date() }),
+    };
     jwtService = { sign: jest.fn() };
     configService = { getOrThrow: jest.fn() };
 
@@ -40,6 +47,7 @@ describe('LoginTeacherHandler', () => {
           provide: getRepositoryToken(RefreshTokenEntity),
           useValue: refreshTokenRepo,
         },
+        { provide: getRepositoryToken(SchoolEntity), useValue: schoolRepo },
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: configService },
       ],
@@ -90,6 +98,17 @@ describe('LoginTeacherHandler', () => {
     );
   });
 
+  it("throws UnauthorizedException when the School's email is not verified", async () => {
+    userRepo.findOne.mockResolvedValue(mockTeacherUser);
+    schoolRepo.findOneBy.mockResolvedValue({ emailVerifiedAt: null });
+    await expect(
+      handler.execute(
+        new LoginTeacherCommand('teacher@example.com', 'password123'),
+      ),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(refreshTokenRepo.save).not.toHaveBeenCalled();
+  });
+
   it('returns tokens and profile when user is TEACHER', async () => {
     userRepo.findOne.mockResolvedValue(mockTeacherUser);
 
@@ -101,9 +120,11 @@ describe('LoginTeacherHandler', () => {
     expect(result.refresh_token).toBe('refresh-token');
     expect(result.user).toEqual({
       id: 'teacher-1',
+      schoolId: 'school-1',
       name: 'Teacher',
       email: 'teacher@example.com',
       role: UserRole.TEACHER,
+      mustChangePassword: false,
     });
     expect(refreshTokenRepo.save).toHaveBeenCalledTimes(1);
   });

@@ -25,16 +25,18 @@ export class JwtAuthGuard implements CanActivate {
     const token = authHeader.slice(7);
     try {
       const secret = this.configService.getOrThrow<string>('jwt.accessSecret');
-      const payload = this.jwtService.verify<{ sub: string; role?: UserRole }>(
-        token,
-        { secret },
-      );
-      if (!payload.role) {
+      const payload = this.jwtService.verify<{
+        sub: string;
+        role?: UserRole;
+        schoolId?: string;
+      }>(token, { secret });
+      if (!payload.role || !payload.schoolId) {
         throw new UnauthorizedException();
       }
       request.user = {
         userId: payload.sub,
         role: payload.role,
+        schoolId: payload.schoolId,
       };
       return true;
     } catch {

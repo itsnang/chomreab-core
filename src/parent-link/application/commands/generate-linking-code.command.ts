@@ -1,3 +1,6 @@
 export class GenerateLinkingCodeCommand {
-  constructor(public readonly studentId: string) {}
+  constructor(
+    public readonly schoolId: string,
+    public readonly studentId: string,
+  ) {}
 }

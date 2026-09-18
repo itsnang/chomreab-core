@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import { UserEntity, UserRole } from '../../../shared/entities/user.entity';
 import { RefreshTokenEntity } from '../../../auth/infrastructure/entities/refresh-token.entity';
 import { ClassroomEntity } from '../../../classroom/infrastructure/entities/classroom.entity';
@@ -23,9 +24,19 @@ export class DeleteTeacherHandler implements ICommandHandler<
   ) {}
 
   async execute(command: DeleteTeacherCommand): Promise<void> {
+    const users = new ScopedRepository(this.userRepository, command.schoolId);
+    const refreshTokens = new ScopedRepository(
+      this.refreshTokenRepository,
+      command.schoolId,
+    );
+    const classrooms = new ScopedRepository(
+      this.classroomRepository,
+      command.schoolId,
+    );
+
     // Scoped to role: TEACHER so this endpoint can never be used to delete an
     // admin account even if an admin's id is passed in.
-    const result = await this.userRepository.delete({
+    const result = await users.delete({
       id: command.id,
       role: UserRole.TEACHER,
     });
@@ -36,10 +47,7 @@ export class DeleteTeacherHandler implements ICommandHandler<
     // Revoke the deleted teacher's access: kill any refresh tokens so their
     // session can't be renewed, and unassign them from any classroom so it
     // doesn't keep pointing at a deleted user id.
-    await this.refreshTokenRepository.delete({ userId: command.id });
-    await this.classroomRepository.update(
-      { teacherId: command.id },
-      { teacherId: null },
-    );
+    await refreshTokens.delete({ userId: command.id });
+    await classrooms.update({ teacherId: command.id }, { teacherId: null });
   }
 }

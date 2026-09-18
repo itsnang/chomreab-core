@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import {
   StudentEntity,
   StudentStatus,
@@ -20,12 +21,16 @@ export class CreateStudentHandler implements ICommandHandler<
   ) {}
 
   async execute(command: CreateStudentCommand): Promise<StudentEntity> {
-    const student = this.studentRepository.create({
+    const students = new ScopedRepository(
+      this.studentRepository,
+      command.schoolId,
+    );
+    const student = students.create({
       id: crypto.randomUUID(),
       name: command.name,
       classroomId: command.classroomId,
       status: StudentStatus.ACTIVE,
     });
-    return this.studentRepository.save(student);
+    return students.save(student);
   }
 }

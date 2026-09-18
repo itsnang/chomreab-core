@@ -63,6 +63,7 @@ describe('MarkAttendanceHandler', () => {
 
     const result = await handler.execute(
       new MarkAttendanceCommand(
+        'school-1',
         'student-1',
         'class-1',
         '2026-08-28',
@@ -92,6 +93,7 @@ describe('MarkAttendanceHandler', () => {
 
     const result = await handler.execute(
       new MarkAttendanceCommand(
+        'school-1',
         'student-1',
         'class-1',
         '2026-08-28',
@@ -125,6 +127,7 @@ describe('MarkAttendanceHandler', () => {
 
     const result = await handler.execute(
       new MarkAttendanceCommand(
+        'school-1',
         'student-1',
         'class-1',
         '2026-08-28',
@@ -151,6 +154,7 @@ describe('MarkAttendanceHandler', () => {
 
     await handler.execute(
       new MarkAttendanceCommand(
+        'school-1',
         'student-1',
         'class-1',
         '2026-08-28',
@@ -174,6 +178,7 @@ describe('MarkAttendanceHandler', () => {
   it('handles race condition: falls back to audit+update when unique constraint fails', async () => {
     const existingRecord: AttendanceRecordEntity = {
       id: 'record-1',
+      schoolId: 'school-1',
       studentId: 'student-1',
       classroomId: 'class-1',
       date: '2026-08-28',
@@ -203,6 +208,7 @@ describe('MarkAttendanceHandler', () => {
 
     const result = await handler.execute(
       new MarkAttendanceCommand(
+        'school-1',
         'student-1',
         'class-1',
         '2026-08-28',
@@ -243,6 +249,7 @@ describe('MarkAttendanceHandler', () => {
     await expect(
       handler.execute(
         new MarkAttendanceCommand(
+          'school-1',
           'missing-student',
           'class-1',
           '2026-08-28',
@@ -267,6 +274,7 @@ describe('MarkAttendanceHandler', () => {
 
     const result = await handler.execute(
       new MarkAttendanceCommand(
+        'school-1',
         'student-1',
         'spoofed-class',
         '2026-08-28',

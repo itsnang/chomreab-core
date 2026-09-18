@@ -27,21 +27,28 @@ describe('Classroom query handlers', () => {
 
   it('lists classrooms ordered by name', async () => {
     repo.find.mockResolvedValue([{ id: '1', name: 'A' }]);
-    const result = await listHandler.execute(new GetClassroomsQuery());
+    const result = await listHandler.execute(
+      new GetClassroomsQuery('school-1'),
+    );
     expect(result).toHaveLength(1);
-    expect(repo.find).toHaveBeenCalledWith({ order: { name: 'ASC' } });
+    expect(repo.find).toHaveBeenCalledWith({
+      order: { name: 'ASC' },
+      where: { schoolId: 'school-1' },
+    });
   });
 
   it('returns a single classroom', async () => {
     repo.findOneBy.mockResolvedValue({ id: '1', name: 'A' });
-    const result = await getHandler.execute(new GetClassroomQuery('1'));
+    const result = await getHandler.execute(
+      new GetClassroomQuery('school-1', '1'),
+    );
     expect(result.id).toBe('1');
   });
 
   it('throws NotFoundException for a missing classroom', async () => {
     repo.findOneBy.mockResolvedValue(null);
     await expect(
-      getHandler.execute(new GetClassroomQuery('missing')),
+      getHandler.execute(new GetClassroomQuery('school-1', 'missing')),
     ).rejects.toThrow(NotFoundException);
   });
 });

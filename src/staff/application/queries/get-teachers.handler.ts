@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import { UserEntity, UserRole } from '../../../shared/entities/user.entity';
 import { ClassroomEntity } from '../../../classroom/infrastructure/entities/classroom.entity';
 import { GetTeachersQuery } from './get-teachers.query';
@@ -26,13 +27,18 @@ export class GetTeachersHandler implements IQueryHandler<
     private readonly classroomRepository: Repository<ClassroomEntity>,
   ) {}
 
-  async execute(_query: GetTeachersQuery): Promise<TeacherWithClassrooms[]> {
+  async execute(query: GetTeachersQuery): Promise<TeacherWithClassrooms[]> {
+    const users = new ScopedRepository(this.userRepository, query.schoolId);
+    const classroomRepo = new ScopedRepository(
+      this.classroomRepository,
+      query.schoolId,
+    );
     const [teachers, classrooms] = await Promise.all([
-      this.userRepository.find({
+      users.find({
         where: { role: UserRole.TEACHER },
         order: { name: 'ASC' },
       }),
-      this.classroomRepository.find(),
+      classroomRepo.find(),
     ]);
 
     return teachers.map((t) => ({

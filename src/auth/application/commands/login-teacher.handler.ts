@@ -8,6 +8,7 @@ import ms from 'ms';
 import * as bcrypt from 'bcrypt';
 import { UserEntity, UserRole } from '../../../shared/entities/user.entity';
 import { RefreshTokenEntity } from '../../infrastructure/entities/refresh-token.entity';
+import { SchoolEntity } from '../../../school/infrastructure/entities/school.entity';
 import { LoginTeacherCommand } from './login-teacher.command';
 
 interface LoginTeacherResult {
@@ -19,6 +20,7 @@ interface LoginTeacherResult {
     email: string;
     role: UserRole;
     mustChangePassword: boolean;
+    schoolId: string;
   };
 }
 
@@ -32,6 +34,8 @@ export class LoginTeacherHandler implements ICommandHandler<
     private readonly userRepository: Repository<UserEntity>,
     @InjectRepository(RefreshTokenEntity)
     private readonly refreshTokenRepository: Repository<RefreshTokenEntity>,
+    @InjectRepository(SchoolEntity)
+    private readonly schoolRepository: Repository<SchoolEntity>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -39,6 +43,14 @@ export class LoginTeacherHandler implements ICommandHandler<
   async execute(command: LoginTeacherCommand): Promise<LoginTeacherResult> {
     const { email, password } = command;
 
+    // Email is unique per School (users.entity.ts), not globally — if the
+    // same address is ever registered at two Schools, this arbitrarily
+    // returns one of them rather than failing closed. Accepted for now: two
+    // signups with the same email is not something the product supports
+    // deliberately, and disambiguating it is a real design question (which
+    // school did they mean?) left for when it's an actual complaint, not a
+    // theoretical one. Whichever row matches is the source of truth for
+    // schoolId below — never anything the caller could assert.
     const user = await this.userRepository.findOne({
       where: { email },
       select: {
@@ -48,6 +60,7 @@ export class LoginTeacherHandler implements ICommandHandler<
         passwordHash: true,
         role: true,
         mustChangePassword: true,
+        schoolId: true,
       },
     });
     if (!user) {
@@ -63,7 +76,18 @@ export class LoginTeacherHandler implements ICommandHandler<
       throw new UnauthorizedException('Access restricted to teacher accounts');
     }
 
-    const payload = { sub: user.id, role: user.role };
+    // Gates the trial itself (CONTEXT.md's "Trial" entry). In practice this
+    // never blocks a teacher — an admin can only create one after their own
+    // School is verified — but the check lives here too rather than assuming
+    // that invariant holds forever.
+    const school = await this.schoolRepository.findOneBy({ id: user.schoolId });
+    if (!school?.emailVerifiedAt) {
+      throw new UnauthorizedException(
+        'This school has not confirmed its email yet — ask your admin to check their inbox.',
+      );
+    }
+
+    const payload = { sub: user.id, role: user.role, schoolId: user.schoolId };
     const accessSecret =
       this.configService.getOrThrow<string>('jwt.accessSecret');
     const accessExpiry =
@@ -89,6 +113,7 @@ export class LoginTeacherHandler implements ICommandHandler<
 
     await this.refreshTokenRepository.save({
       id: crypto.randomUUID(),
+      schoolId: user.schoolId,
       tokenHash,
       userId: user.id,
       expiresAt,
@@ -103,6 +128,7 @@ export class LoginTeacherHandler implements ICommandHandler<
         email: user.email,
         role: user.role,
         mustChangePassword: user.mustChangePassword,
+        schoolId: user.schoolId,
       },
     };
   }

@@ -56,7 +56,7 @@ describe('GetAuditLogHandler', () => {
     userRepo.find.mockResolvedValue([{ id: 'u1', name: 'Chenda' }]);
 
     const result = await handler.execute(
-      new GetAuditLogQuery('c1', '2026-08-28'),
+      new GetAuditLogQuery('school-1', 'c1', '2026-08-28'),
     );
     expect(result).toEqual([
       {
@@ -72,7 +72,7 @@ describe('GetAuditLogHandler', () => {
   it('returns an empty array when there are no attendance records for the day', async () => {
     recordRepo.find.mockResolvedValue([]);
     const result = await handler.execute(
-      new GetAuditLogQuery('c1', '2026-08-28'),
+      new GetAuditLogQuery('school-1', 'c1', '2026-08-28'),
     );
     expect(result).toEqual([]);
     expect(auditRepo.find).not.toHaveBeenCalled();

@@ -24,6 +24,10 @@ export class MigrateGroupChatHandler implements ICommandHandler<
   ) {}
 
   async execute(command: MigrateGroupChatCommand): Promise<void> {
+    // Left unscoped on purpose: a chat id rewrite is about the physical
+    // Telegram chat, not a School boundary, and every ParentLink row at that
+    // chat id — regardless of which School it belongs to — needs the same
+    // new id or its messages start failing silently.
     await this.parentLinkRepository.update(
       { telegramChatId: command.oldChatId },
       { telegramChatId: command.newChatId },

@@ -5,6 +5,9 @@ export class PasswordResetTokenEntity {
   @PrimaryColumn('uuid')
   id: string;
 
+  @Column({ type: 'uuid' })
+  schoolId: string;
+
   @Column()
   tokenHash: string;
 

@@ -23,7 +23,10 @@ const USERS = [
   },
 ];
 
-export async function seedUsers(dataSource: DataSource): Promise<UserEntity[]> {
+export async function seedUsers(
+  dataSource: DataSource,
+  schoolId: string,
+): Promise<UserEntity[]> {
   const repo: Repository<UserEntity> = dataSource.getRepository(UserEntity);
   const results: UserEntity[] = [];
 
@@ -35,7 +38,9 @@ export async function seedUsers(dataSource: DataSource): Promise<UserEntity[]> {
   }
 
   for (const data of USERS) {
-    const existing = await repo.findOneBy({ email: data.email });
+    // Scoped to this School: email is unique per (schoolId, email), not
+    // globally, so the existence check has to match that.
+    const existing = await repo.findOneBy({ email: data.email, schoolId });
     if (existing) {
       console.log(`  [skip] user "${data.email}" already exists`);
       results.push(existing);
@@ -45,6 +50,7 @@ export async function seedUsers(dataSource: DataSource): Promise<UserEntity[]> {
     const passwordHash = await bcrypt.hash(data.password, 12);
     const user = repo.create({
       id: crypto.randomUUID(),
+      schoolId,
       name: data.name,
       email: data.email,
       passwordHash,

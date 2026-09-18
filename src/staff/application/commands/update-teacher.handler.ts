@@ -6,6 +6,7 @@ import {
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import { UserEntity, UserRole } from '../../../shared/entities/user.entity';
 import { UpdateTeacherCommand } from './update-teacher.command';
 
@@ -21,7 +22,8 @@ export class UpdateTeacherHandler implements ICommandHandler<
   ) {}
 
   async execute(command: UpdateTeacherCommand): Promise<UserEntity> {
-    const teacher = await this.userRepository.findOneBy({
+    const users = new ScopedRepository(this.userRepository, command.schoolId);
+    const teacher = await users.findOneBy({
       id: command.id,
       role: UserRole.TEACHER,
     });
@@ -30,9 +32,10 @@ export class UpdateTeacherHandler implements ICommandHandler<
     }
 
     if (command.email !== undefined && command.email !== teacher.email) {
-      // Email is the login identity, so it has to stay unique across every
-      // account, not just among teachers.
-      const taken = await this.userRepository.findOneBy({
+      // Email is the login identity, so it has to stay unique within this
+      // School — not globally, since the same address may exist at another
+      // School entirely (user.entity.ts).
+      const taken = await users.findOneBy({
         email: command.email,
         id: Not(command.id),
       });
@@ -44,6 +47,6 @@ export class UpdateTeacherHandler implements ICommandHandler<
 
     if (command.name !== undefined) teacher.name = command.name;
 
-    return this.userRepository.save(teacher);
+    return users.save(teacher);
   }
 }

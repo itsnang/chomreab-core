@@ -40,7 +40,7 @@ describe('GetRosterHandler', () => {
     ]);
 
     const result = await handler.execute(
-      new GetRosterQuery('class-1', '2026-08-28'),
+      new GetRosterQuery('school-1', 'class-1', '2026-08-28'),
     );
 
     expect(result).toEqual([
@@ -63,14 +63,24 @@ describe('GetRosterHandler', () => {
     studentRepo.find.mockResolvedValue([]);
     recordRepo.find.mockResolvedValue([]);
 
-    await handler.execute(new GetRosterQuery('class-42', '2026-01-05'));
+    await handler.execute(
+      new GetRosterQuery('school-1', 'class-42', '2026-01-05'),
+    );
 
     expect(studentRepo.find).toHaveBeenCalledWith({
-      where: { classroomId: 'class-42', status: StudentStatus.ACTIVE },
+      where: {
+        classroomId: 'class-42',
+        status: StudentStatus.ACTIVE,
+        schoolId: 'school-1',
+      },
       order: { name: 'ASC' },
     });
     expect(recordRepo.find).toHaveBeenCalledWith({
-      where: { classroomId: 'class-42', date: '2026-01-05' },
+      where: {
+        classroomId: 'class-42',
+        date: '2026-01-05',
+        schoolId: 'school-1',
+      },
     });
   });
 
@@ -84,7 +94,7 @@ describe('GetRosterHandler', () => {
     ]);
 
     const result = await handler.execute(
-      new GetRosterQuery('class-1', '2026-08-28'),
+      new GetRosterQuery('school-1', 'class-1', '2026-08-28'),
     );
 
     expect(result).toEqual([
@@ -108,7 +118,7 @@ describe('GetRosterHandler', () => {
     recordRepo.find.mockResolvedValue([]);
 
     const result = await handler.execute(
-      new GetRosterQuery('class-empty', '2026-08-28'),
+      new GetRosterQuery('school-1', 'class-empty', '2026-08-28'),
     );
 
     expect(result).toEqual([]);
@@ -122,7 +132,7 @@ describe('GetRosterHandler', () => {
     recordRepo.find.mockResolvedValue([]);
 
     const result = await handler.execute(
-      new GetRosterQuery('class-1', '2026-08-29'),
+      new GetRosterQuery('school-1', 'class-1', '2026-08-29'),
     );
 
     expect(result).toEqual([

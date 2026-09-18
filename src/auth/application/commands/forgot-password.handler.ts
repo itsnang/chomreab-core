@@ -31,6 +31,7 @@ export class ForgotPasswordHandler implements ICommandHandler<
 
     await this.passwordResetTokenRepository.save({
       id: randomUUID(),
+      schoolId: user.schoolId,
       tokenHash,
       userId: user.id,
       expiresAt: new Date(Date.now() + 60 * 60 * 1000),

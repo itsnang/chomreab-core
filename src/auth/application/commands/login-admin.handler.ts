@@ -8,6 +8,7 @@ import ms from 'ms';
 import * as bcrypt from 'bcrypt';
 import { UserEntity, UserRole } from '../../../shared/entities/user.entity';
 import { RefreshTokenEntity } from '../../infrastructure/entities/refresh-token.entity';
+import { SchoolEntity } from '../../../school/infrastructure/entities/school.entity';
 import { LoginAdminCommand } from './login-admin.command';
 
 interface LoginAdminResult {
@@ -19,6 +20,7 @@ interface LoginAdminResult {
     email: string;
     role: UserRole;
     mustChangePassword: boolean;
+    schoolId: string;
   };
 }
 
@@ -32,6 +34,8 @@ export class LoginAdminHandler implements ICommandHandler<
     private readonly userRepository: Repository<UserEntity>,
     @InjectRepository(RefreshTokenEntity)
     private readonly refreshTokenRepository: Repository<RefreshTokenEntity>,
+    @InjectRepository(SchoolEntity)
+    private readonly schoolRepository: Repository<SchoolEntity>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -39,6 +43,14 @@ export class LoginAdminHandler implements ICommandHandler<
   async execute(command: LoginAdminCommand): Promise<LoginAdminResult> {
     const { email, password } = command;
 
+    // Email is unique per School (users.entity.ts), not globally — if the
+    // same address is ever registered at two Schools, this arbitrarily
+    // returns one of them rather than failing closed. Accepted for now: two
+    // signups with the same email is not something the product supports
+    // deliberately, and disambiguating it is a real design question (which
+    // school did they mean?) left for when it's an actual complaint, not a
+    // theoretical one. Whichever row matches is the source of truth for
+    // schoolId below — never anything the caller could assert.
     const user = await this.userRepository.findOne({
       where: { email },
       select: {
@@ -48,6 +60,7 @@ export class LoginAdminHandler implements ICommandHandler<
         passwordHash: true,
         role: true,
         mustChangePassword: true,
+        schoolId: true,
       },
     });
     if (!user) {
@@ -63,7 +76,18 @@ export class LoginAdminHandler implements ICommandHandler<
       throw new UnauthorizedException('Access restricted to admin accounts');
     }
 
-    const payload = { sub: user.id, role: user.role };
+    // Gates the trial itself (CONTEXT.md's "Trial" entry) — a School with an
+    // unconfirmed founding email cannot sign in at all, admin or teacher.
+    // Every teacher account is created by an already-verified admin, so this
+    // check only ever actually blocks the founder's own first login.
+    const school = await this.schoolRepository.findOneBy({ id: user.schoolId });
+    if (!school?.emailVerifiedAt) {
+      throw new UnauthorizedException(
+        'Confirm your email before signing in — check your inbox for the verification link.',
+      );
+    }
+
+    const payload = { sub: user.id, role: user.role, schoolId: user.schoolId };
     const accessSecret =
       this.configService.getOrThrow<string>('jwt.accessSecret');
     const accessExpiry =
@@ -89,6 +113,7 @@ export class LoginAdminHandler implements ICommandHandler<
 
     await this.refreshTokenRepository.save({
       id: crypto.randomUUID(),
+      schoolId: user.schoolId,
       tokenHash,
       userId: user.id,
       expiresAt,
@@ -103,6 +128,7 @@ export class LoginAdminHandler implements ICommandHandler<
         email: user.email,
         role: user.role,
         mustChangePassword: user.mustChangePassword,
+        schoolId: user.schoolId,
       },
     };
   }

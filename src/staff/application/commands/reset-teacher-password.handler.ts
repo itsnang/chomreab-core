@@ -3,6 +3,7 @@ import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import { UserEntity, UserRole } from '../../../shared/entities/user.entity';
 import { RefreshTokenEntity } from '../../../auth/infrastructure/entities/refresh-token.entity';
 import { generateTempPassword } from '../generate-temp-password';
@@ -34,7 +35,13 @@ export class ResetTeacherPasswordHandler implements ICommandHandler<
   async execute(
     command: ResetTeacherPasswordCommand,
   ): Promise<ResetTeacherPassword> {
-    const teacher = await this.userRepository.findOneBy({
+    const users = new ScopedRepository(this.userRepository, command.schoolId);
+    const refreshTokens = new ScopedRepository(
+      this.refreshTokenRepository,
+      command.schoolId,
+    );
+
+    const teacher = await users.findOneBy({
       id: command.id,
       role: UserRole.TEACHER,
     });
@@ -43,14 +50,17 @@ export class ResetTeacherPasswordHandler implements ICommandHandler<
     }
 
     const temporaryPassword = generateTempPassword();
-    await this.userRepository.update(teacher.id, {
-      passwordHash: await bcrypt.hash(temporaryPassword, 12),
-      mustChangePassword: true,
-    });
+    await users.update(
+      { id: teacher.id },
+      {
+        passwordHash: await bcrypt.hash(temporaryPassword, 12),
+        mustChangePassword: true,
+      },
+    );
 
     // Whoever was signed in with the old password — the locked-out teacher, or
     // anyone else holding it — is signed out.
-    await this.refreshTokenRepository.delete({ userId: teacher.id });
+    await refreshTokens.delete({ userId: teacher.id });
 
     return { temporaryPassword };
   }

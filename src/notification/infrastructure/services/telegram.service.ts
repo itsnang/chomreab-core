@@ -8,7 +8,7 @@ export class TelegramService implements ITelegramService {
   constructor(private readonly schoolSettings: SchoolSettingsService) {}
 
   async sendMessage(chatId: string, text: string): Promise<void> {
-    const botToken = await this.schoolSettings.getEffectiveBotToken();
+    const botToken = this.schoolSettings.getEffectiveBotToken();
     if (!botToken) {
       throw new Error('No Telegram bot token configured');
     }
