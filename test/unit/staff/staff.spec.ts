@@ -56,7 +56,7 @@ describe('Staff command handlers', () => {
   it('creates a teacher with a temporary password', async () => {
     repo.findOneBy.mockResolvedValue(null);
     const result = await createHandler.execute(
-      new CreateTeacherCommand('Chenda Ly', 'chenda@school.edu'),
+      new CreateTeacherCommand('school-1', 'Chenda Ly', 'chenda@school.edu'),
     );
     expect(result.email).toBe('chenda@school.edu');
     expect(result.temporaryPassword.length).toBeGreaterThanOrEqual(8);
@@ -69,7 +69,7 @@ describe('Staff command handlers', () => {
     repo.findOneBy.mockResolvedValue({ id: 'existing' });
     await expect(
       createHandler.execute(
-        new CreateTeacherCommand('Dup', 'taken@school.edu'),
+        new CreateTeacherCommand('school-1', 'Dup', 'taken@school.edu'),
       ),
     ).rejects.toThrow(ConflictException);
   });
@@ -77,15 +77,19 @@ describe('Staff command handlers', () => {
   it('deletes a teacher and revokes their access', async () => {
     repo.delete.mockResolvedValue({ affected: 1 });
     await expect(
-      deleteHandler.execute(new DeleteTeacherCommand('1')),
+      deleteHandler.execute(new DeleteTeacherCommand('school-1', '1')),
     ).resolves.toBeUndefined();
     expect(repo.delete).toHaveBeenCalledWith({
       id: '1',
       role: UserRole.TEACHER,
+      schoolId: 'school-1',
     });
-    expect(refreshTokenRepo.delete).toHaveBeenCalledWith({ userId: '1' });
+    expect(refreshTokenRepo.delete).toHaveBeenCalledWith({
+      userId: '1',
+      schoolId: 'school-1',
+    });
     expect(classroomRepo.update).toHaveBeenCalledWith(
-      { teacherId: '1' },
+      { teacherId: '1', schoolId: 'school-1' },
       { teacherId: null },
     );
   });
@@ -93,7 +97,7 @@ describe('Staff command handlers', () => {
   it('throws NotFoundException deleting a missing teacher and does not touch other tables', async () => {
     repo.delete.mockResolvedValue({ affected: 0 });
     await expect(
-      deleteHandler.execute(new DeleteTeacherCommand('missing')),
+      deleteHandler.execute(new DeleteTeacherCommand('school-1', 'missing')),
     ).rejects.toThrow(NotFoundException);
     expect(refreshTokenRepo.delete).not.toHaveBeenCalled();
     expect(classroomRepo.update).not.toHaveBeenCalled();
@@ -137,7 +141,7 @@ describe('GetTeachersHandler', () => {
       { id: 'c2', name: 'Grade 5B', teacherId: 'other' },
     ]);
 
-    const result = await handler.execute(new GetTeachersQuery());
+    const result = await handler.execute(new GetTeachersQuery('school-1'));
     expect(result).toEqual([
       {
         id: 't1',

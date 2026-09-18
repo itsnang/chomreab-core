@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CommandHandler, EventBus, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import {
   AttendanceRecordEntity,
   AttendanceStatus,
@@ -30,9 +31,12 @@ export class MarkAttendanceHandler implements ICommandHandler<
   async execute(
     command: MarkAttendanceCommand,
   ): Promise<AttendanceRecordEntity> {
-    const { studentId, date, status, note, markedByUserId } = command;
+    const { schoolId, studentId, date, status, note, markedByUserId } = command;
+    const records = new ScopedRepository(this.recordRepository, schoolId);
+    const audit = new ScopedRepository(this.auditRepository, schoolId);
+    const students = new ScopedRepository(this.studentRepository, schoolId);
 
-    const student = await this.studentRepository.findOneBy({ id: studentId });
+    const student = await students.findOneBy({ id: studentId });
     if (!student) {
       throw new NotFoundException('Student not found');
     }
@@ -42,11 +46,13 @@ export class MarkAttendanceHandler implements ICommandHandler<
     // any roster.
     const classroomId = student.classroomId;
 
-    let existing = await this.recordRepository.findOneBy({ studentId, date });
+    let existing = await records.findOneBy({ studentId, date });
 
     let record: AttendanceRecordEntity;
     if (existing) {
       record = await this.updateAndAudit(
+        records,
+        audit,
         existing,
         status,
         note,
@@ -54,8 +60,8 @@ export class MarkAttendanceHandler implements ICommandHandler<
       );
     } else {
       try {
-        record = await this.recordRepository.save(
-          this.recordRepository.create({
+        record = await records.save(
+          records.create({
             id: crypto.randomUUID(),
             studentId,
             classroomId,
@@ -72,9 +78,11 @@ export class MarkAttendanceHandler implements ICommandHandler<
           error instanceof QueryFailedError &&
           (error.driverError as { code?: string }).code === '23505'
         ) {
-          existing = await this.recordRepository.findOneBy({ studentId, date });
+          existing = await records.findOneBy({ studentId, date });
           if (existing) {
             record = await this.updateAndAudit(
+              records,
+              audit,
               existing,
               status,
               note,
@@ -90,13 +98,22 @@ export class MarkAttendanceHandler implements ICommandHandler<
     }
 
     this.eventBus.publish(
-      new AttendanceMarkedEvent(studentId, classroomId, date, status, note),
+      new AttendanceMarkedEvent(
+        schoolId,
+        studentId,
+        classroomId,
+        date,
+        status,
+        note,
+      ),
     );
 
     return record;
   }
 
   private async updateAndAudit(
+    records: ScopedRepository<AttendanceRecordEntity>,
+    audit: ScopedRepository<AttendanceAuditLogEntity>,
     record: AttendanceRecordEntity,
     status: AttendanceStatus,
     note: string | null,
@@ -104,7 +121,7 @@ export class MarkAttendanceHandler implements ICommandHandler<
   ): Promise<AttendanceRecordEntity> {
     // Re-marking the same student on the same day is an edit — keep an audit
     // trail of who changed it and what it changed from/to.
-    await this.auditRepository.save({
+    await audit.save({
       id: crypto.randomUUID(),
       attendanceRecordId: record.id,
       changedByUserId: markedByUserId,
@@ -114,6 +131,6 @@ export class MarkAttendanceHandler implements ICommandHandler<
     record.status = status;
     record.note = note;
     record.markedByUserId = markedByUserId;
-    return this.recordRepository.save(record);
+    return records.save(record);
   }
 }

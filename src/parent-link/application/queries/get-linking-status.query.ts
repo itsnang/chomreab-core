@@ -1,1 +1,3 @@
-export class GetLinkingStatusQuery {}
+export class GetLinkingStatusQuery {
+  constructor(public readonly schoolId: string) {}
+}

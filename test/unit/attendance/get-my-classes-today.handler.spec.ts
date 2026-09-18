@@ -48,7 +48,7 @@ describe('GetMyClassesTodayHandler', () => {
     ]);
 
     const result = await handler.execute(
-      new GetMyClassesTodayQuery('t1', '2026-08-28'),
+      new GetMyClassesTodayQuery('school-1', 't1', '2026-08-28'),
     );
     expect(result).toEqual([
       {
@@ -64,7 +64,7 @@ describe('GetMyClassesTodayHandler', () => {
   it('returns an empty array when the teacher has no classrooms', async () => {
     classroomRepo.find.mockResolvedValue([]);
     const result = await handler.execute(
-      new GetMyClassesTodayQuery('t1', '2026-08-28'),
+      new GetMyClassesTodayQuery('school-1', 't1', '2026-08-28'),
     );
     expect(result).toEqual([]);
     expect(studentRepo.find).not.toHaveBeenCalled();

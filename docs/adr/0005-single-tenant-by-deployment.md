@@ -1,3 +1,7 @@
+---
+status: superseded by ADR-0006
+---
+
 # One deployment per school
 
 Rollcall serves a single school per deployment. There is no tenancy: no table carries a school id, and `SchoolSettingsEntity` is pinned to one row by `SCHOOL_SETTINGS_ID = 'default'`. Telegram reinforces it — `telegram.webhookSecret` is a single environment value, so the webhook has no way to tell one school's messages from another's.

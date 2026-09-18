@@ -1,3 +1,6 @@
 export class DeleteClassroomCommand {
-  constructor(public readonly id: string) {}
+  constructor(
+    public readonly schoolId: string,
+    public readonly id: string,
+  ) {}
 }

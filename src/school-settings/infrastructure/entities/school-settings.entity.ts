@@ -1,20 +1,25 @@
 import { Column, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
-export const SCHOOL_SETTINGS_ID = 'default';
-
 export const DEFAULT_SCHOOL_SETTINGS = {
   schoolName: 'My School',
   lateCutoffMinutes: 15,
   absenceMessageTemplate:
     '{{student_name}} was marked absent today with no note on file.',
-  telegramBotToken: null as string | null,
-  telegramBotUsername: null as string | null,
 };
 
+/** One row per School, keyed directly by `schoolId` rather than a separate
+ *  generated `id` — the relationship is exactly 1:1 forever, and nothing
+ *  addresses a settings row from any other context, so a second identity
+ *  would only be a redundant index. This replaces the single-tenant era's
+ *  hardcoded singleton row (`id = 'default'`).
+ *
+ *  Carries no Telegram fields: every School shares one bot (ADR-0007), so the
+ *  token and username are deployment config (`configuration.ts`), never
+ *  per-school data. */
 @Entity('school_settings')
 export class SchoolSettingsEntity {
-  @PrimaryColumn({ type: 'varchar' })
-  id: string;
+  @PrimaryColumn({ type: 'uuid' })
+  schoolId: string;
 
   @Column({ type: 'varchar' })
   schoolName: string;
@@ -24,15 +29,6 @@ export class SchoolSettingsEntity {
 
   @Column({ type: 'text' })
   absenceMessageTemplate: string;
-
-  @Column({ type: 'varchar', nullable: true })
-  telegramBotToken: string | null;
-
-  /** Fetched once via Telegram's `getMe` and cached here — never entered by
-   *  an admin, so a typo can't produce an invite link that looks fine and
-   *  goes nowhere. Refreshed whenever the token changes. */
-  @Column({ type: 'varchar', nullable: true })
-  telegramBotUsername: string | null;
 
   @UpdateDateColumn()
   updatedAt: Date;

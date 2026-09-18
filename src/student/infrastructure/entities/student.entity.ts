@@ -16,6 +16,9 @@ export class StudentEntity {
   @PrimaryColumn('uuid')
   id: string;
 
+  @Column({ type: 'uuid' })
+  schoolId: string;
+
   @Column()
   name: string;
 

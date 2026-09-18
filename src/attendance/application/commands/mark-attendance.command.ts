@@ -2,6 +2,7 @@ import type { AttendanceStatus } from '../../infrastructure/entities/attendance-
 
 export class MarkAttendanceCommand {
   constructor(
+    public readonly schoolId: string,
     public readonly studentId: string,
     public readonly classroomId: string,
     public readonly date: string,

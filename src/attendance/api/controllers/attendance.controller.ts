@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../shared/guards/roles.guard';
 import { Roles } from '../../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
+import { CurrentSchoolId } from '../../../shared/decorators/current-school-id.decorator';
 import { UserRole } from '../../../shared/entities/user.entity';
 import { MarkAttendanceDto } from '../dto/mark-attendance.dto';
 import { BulkMarkAttendanceDto } from '../dto/bulk-mark-attendance.dto';
@@ -31,9 +32,9 @@ export class AttendanceController {
   })
   @Roles(UserRole.ADMIN, UserRole.TEACHER)
   @Get('roster')
-  roster(@Query() query: GetRosterDto) {
+  roster(@CurrentSchoolId() schoolId: string, @Query() query: GetRosterDto) {
     return this.queryBus.execute(
-      new GetRosterQuery(query.classroom_id, query.date),
+      new GetRosterQuery(schoolId, query.classroom_id, query.date),
     );
   }
 
@@ -42,9 +43,14 @@ export class AttendanceController {
   })
   @Roles(UserRole.TEACHER)
   @Post('mark')
-  mark(@Body() dto: MarkAttendanceDto, @CurrentUser() userId: string) {
+  mark(
+    @CurrentSchoolId() schoolId: string,
+    @Body() dto: MarkAttendanceDto,
+    @CurrentUser() userId: string,
+  ) {
     return this.commandBus.execute(
       new MarkAttendanceCommand(
+        schoolId,
         dto.student_id,
         dto.classroom_id,
         dto.date,
@@ -61,9 +67,14 @@ export class AttendanceController {
   })
   @Roles(UserRole.TEACHER)
   @Post('bulk-mark')
-  bulkMark(@Body() dto: BulkMarkAttendanceDto, @CurrentUser() userId: string) {
+  bulkMark(
+    @CurrentSchoolId() schoolId: string,
+    @Body() dto: BulkMarkAttendanceDto,
+    @CurrentUser() userId: string,
+  ) {
     return this.commandBus.execute(
       new BulkMarkAttendanceCommand(
+        schoolId,
         dto.student_ids,
         dto.classroom_id,
         dto.date,
@@ -78,9 +89,13 @@ export class AttendanceController {
   })
   @Roles(UserRole.TEACHER)
   @Get('my-classes')
-  myClasses(@CurrentUser() userId: string, @Query() query: GetMyClassesDto) {
+  myClasses(
+    @CurrentSchoolId() schoolId: string,
+    @CurrentUser() userId: string,
+    @Query() query: GetMyClassesDto,
+  ) {
     return this.queryBus.execute(
-      new GetMyClassesTodayQuery(userId, query.date),
+      new GetMyClassesTodayQuery(schoolId, userId, query.date),
     );
   }
 
@@ -89,9 +104,9 @@ export class AttendanceController {
   })
   @Roles(UserRole.ADMIN, UserRole.TEACHER)
   @Get('audit-log')
-  auditLog(@Query() query: GetRosterDto) {
+  auditLog(@CurrentSchoolId() schoolId: string, @Query() query: GetRosterDto) {
     return this.queryBus.execute(
-      new GetAuditLogQuery(query.classroom_id, query.date),
+      new GetAuditLogQuery(schoolId, query.classroom_id, query.date),
     );
   }
 }

@@ -7,6 +7,9 @@ export class AttendanceAuditLogEntity {
   id: string;
 
   @Column({ type: 'uuid' })
+  schoolId: string;
+
+  @Column({ type: 'uuid' })
   attendanceRecordId: string;
 
   @Column({ type: 'uuid' })

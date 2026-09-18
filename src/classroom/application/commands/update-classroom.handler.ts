@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import { ClassroomEntity } from '../../infrastructure/entities/classroom.entity';
 import { UpdateClassroomCommand } from './update-classroom.command';
 
@@ -17,9 +18,11 @@ export class UpdateClassroomHandler implements ICommandHandler<
   ) {}
 
   async execute(command: UpdateClassroomCommand): Promise<ClassroomEntity> {
-    const classroom = await this.classroomRepository.findOneBy({
-      id: command.id,
-    });
+    const classrooms = new ScopedRepository(
+      this.classroomRepository,
+      command.schoolId,
+    );
+    const classroom = await classrooms.findOneBy({ id: command.id });
     if (!classroom) {
       throw new NotFoundException('Classroom not found');
     }
@@ -28,6 +31,6 @@ export class UpdateClassroomHandler implements ICommandHandler<
       classroom.gradeLabel = command.gradeLabel;
     if (command.teacherId !== undefined)
       classroom.teacherId = command.teacherId;
-    return this.classroomRepository.save(classroom);
+    return classrooms.save(classroom);
   }
 }

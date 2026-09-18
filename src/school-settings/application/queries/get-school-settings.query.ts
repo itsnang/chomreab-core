@@ -1,1 +1,3 @@
-export class GetSchoolSettingsQuery {}
+export class GetSchoolSettingsQuery {
+  constructor(public readonly schoolId: string) {}
+}

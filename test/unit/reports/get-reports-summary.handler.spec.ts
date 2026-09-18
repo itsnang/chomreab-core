@@ -76,7 +76,7 @@ describe('GetReportsSummaryHandler', () => {
     ]);
 
     const result = await handler.execute(
-      new GetReportsSummaryQuery('2026-08-28'),
+      new GetReportsSummaryQuery('school-1', '2026-08-28'),
     );
     expect(result.studentRows[0]).toMatchObject({ absent: 3, chronic: true });
     expect(result.chronicCount).toBe(1);
@@ -97,7 +97,7 @@ describe('GetReportsSummaryHandler', () => {
     recordRepo.find.mockResolvedValue([]);
 
     const result = await handler.execute(
-      new GetReportsSummaryQuery('2026-08-28'),
+      new GetReportsSummaryQuery('school-1', '2026-08-28'),
     );
     expect(result.studentRows[0]).toMatchObject({
       ratePct: 100,
@@ -124,11 +124,14 @@ describe('GetReportsSummaryHandler', () => {
     recordRepo.find.mockResolvedValue([]);
 
     const result = await handler.execute(
-      new GetReportsSummaryQuery('2026-08-28'),
+      new GetReportsSummaryQuery('school-1', '2026-08-28'),
     );
 
     expect(recordRepo.find).toHaveBeenCalledWith({
-      where: { date: Between('2026-08-09', '2026-08-28') },
+      where: {
+        date: Between('2026-08-09', '2026-08-28'),
+        schoolId: 'school-1',
+      },
     });
     expect(result.studentRows[0]).toMatchObject({ absent: 0, chronic: false });
   });
@@ -161,7 +164,7 @@ describe('GetReportsSummaryHandler', () => {
     ]);
 
     const result = await handler.execute(
-      new GetReportsSummaryQuery('2026-08-28'),
+      new GetReportsSummaryQuery('school-1', '2026-08-28'),
     );
     expect(result.dailySummary[0]).toEqual({
       classroomId: 'c1',
@@ -203,7 +206,7 @@ describe('GetReportsSummaryHandler', () => {
     ]);
 
     const result = await handler.execute(
-      new GetReportsSummaryQuery('2026-08-28'),
+      new GetReportsSummaryQuery('school-1', '2026-08-28'),
     );
 
     expect(result.studentRows).toHaveLength(2);
@@ -246,7 +249,7 @@ describe('GetReportsSummaryHandler', () => {
     );
 
     const result = await handler.execute(
-      new GetReportsSummaryQuery('2026-08-28'),
+      new GetReportsSummaryQuery('school-1', '2026-08-28'),
     );
 
     expect(result.chronicCount).toBe(1);
@@ -273,7 +276,7 @@ describe('GetReportsSummaryHandler', () => {
     ]);
 
     const result = await handler.execute(
-      new GetReportsSummaryQuery('2026-08-28'),
+      new GetReportsSummaryQuery('school-1', '2026-08-28'),
     );
 
     expect(result.dailySummary[0]).toMatchObject({ present: 1, unmarked: 0 });

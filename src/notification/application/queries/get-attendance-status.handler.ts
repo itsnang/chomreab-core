@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import { ParentLinkEntity } from '../../../parent-link/infrastructure/entities/parent-link.entity';
 import { StudentEntity } from '../../../student/infrastructure/entities/student.entity';
 import { AttendanceRecordEntity } from '../../../attendance/infrastructure/entities/attendance-record.entity';
@@ -25,6 +26,10 @@ export class GetAttendanceStatusHandler implements IQueryHandler<
   ) {}
 
   async execute(query: GetAttendanceStatusQuery): Promise<string> {
+    // No schoolId on the query itself — same shape as link-parent.handler.ts.
+    // A chat's links can span more than one School (one parent, two
+    // institutions is ordinary here), so there is no single scope for this
+    // whole query; each link is scoped by its own schoolId as it's read.
     const links = await this.parentLinkRepository.find({
       where: { telegramChatId: query.telegramChatId },
     });
@@ -35,11 +40,17 @@ export class GetAttendanceStatusHandler implements IQueryHandler<
     const today = getSchoolToday();
     const lines: string[] = [];
     for (const link of links) {
-      const student = await this.studentRepository.findOneBy({
-        id: link.studentId,
-      });
+      const students = new ScopedRepository(
+        this.studentRepository,
+        link.schoolId,
+      );
+      const records = new ScopedRepository(
+        this.recordRepository,
+        link.schoolId,
+      );
+      const student = await students.findOneBy({ id: link.studentId });
       if (!student) continue;
-      const record = await this.recordRepository.findOneBy({
+      const record = await records.findOneBy({
         studentId: link.studentId,
         date: today,
       });

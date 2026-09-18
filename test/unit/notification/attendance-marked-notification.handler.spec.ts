@@ -50,6 +50,7 @@ describe('AttendanceMarkedNotificationHandler', () => {
     parentLinkRepo.find.mockResolvedValue([]);
     await handler.handle(
       new AttendanceMarkedEvent(
+        'school-1',
         'student-1',
         'class-1',
         '2026-08-28',
@@ -69,6 +70,7 @@ describe('AttendanceMarkedNotificationHandler', () => {
 
     await handler.handle(
       new AttendanceMarkedEvent(
+        'school-1',
         'student-1',
         'class-1',
         '2026-08-28',
@@ -108,6 +110,7 @@ describe('AttendanceMarkedNotificationHandler', () => {
 
     await handler.handle(
       new AttendanceMarkedEvent(
+        'school-1',
         'student-1',
         'class-1',
         '2026-08-28',
@@ -137,6 +140,7 @@ describe('AttendanceMarkedNotificationHandler', () => {
 
     await handler.handle(
       new AttendanceMarkedEvent(
+        'school-1',
         'student-1',
         'class-1',
         '2026-08-28',
@@ -151,6 +155,7 @@ describe('AttendanceMarkedNotificationHandler', () => {
     expect(parentLinkRepo.delete).toHaveBeenCalledWith({
       studentId: 'student-1',
       telegramChatId: 'chat-1',
+      schoolId: 'school-1',
     });
     // The other parent's delivery, and their link, are untouched.
     expect(telegramService.sendMessage).toHaveBeenCalledTimes(2);
@@ -186,6 +191,7 @@ describe('AttendanceMarkedNotificationHandler', () => {
 
     await testHandler.handle(
       new AttendanceMarkedEvent(
+        'school-1',
         'student-1',
         'class-1',
         '2026-08-28',
@@ -234,6 +240,7 @@ describe('AttendanceMarkedNotificationHandler', () => {
 
     await testHandler.handle(
       new AttendanceMarkedEvent(
+        'school-1',
         'student-1',
         'class-1',
         '2026-08-28',

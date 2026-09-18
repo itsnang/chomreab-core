@@ -33,7 +33,7 @@ describe('UpdateTeacherHandler', () => {
   it('throws NotFoundException for a missing teacher', async () => {
     userRepo.findOneBy.mockResolvedValue(null);
     await expect(
-      handler.execute(new UpdateTeacherCommand('nope', 'New Name')),
+      handler.execute(new UpdateTeacherCommand('school-1', 'nope', 'New Name')),
     ).rejects.toThrow(NotFoundException);
     expect(userRepo.save).not.toHaveBeenCalled();
   });
@@ -41,7 +41,7 @@ describe('UpdateTeacherHandler', () => {
   it('updates only the fields provided', async () => {
     userRepo.findOneBy.mockResolvedValue(existing());
     const result = await handler.execute(
-      new UpdateTeacherCommand('t1', 'Chenda Lim'),
+      new UpdateTeacherCommand('school-1', 't1', 'Chenda Lim'),
     );
     expect(result.name).toBe('Chenda Lim');
     expect(result.email).toBe('chenda@school.edu');
@@ -54,7 +54,12 @@ describe('UpdateTeacherHandler', () => {
 
     await expect(
       handler.execute(
-        new UpdateTeacherCommand('t1', undefined, 'taken@school.edu'),
+        new UpdateTeacherCommand(
+          'school-1',
+          't1',
+          undefined,
+          'taken@school.edu',
+        ),
       ),
     ).rejects.toThrow(ConflictException);
     expect(userRepo.save).not.toHaveBeenCalled();
@@ -66,19 +71,25 @@ describe('UpdateTeacherHandler', () => {
       .mockResolvedValueOnce(null);
 
     await handler.execute(
-      new UpdateTeacherCommand('t1', undefined, 'new@school.edu'),
+      new UpdateTeacherCommand('school-1', 't1', undefined, 'new@school.edu'),
     );
 
     expect(userRepo.findOneBy).toHaveBeenLastCalledWith({
       email: 'new@school.edu',
       id: Not('t1'),
+      schoolId: 'school-1',
     });
   });
 
   it('does not run the uniqueness check when the email is unchanged', async () => {
     userRepo.findOneBy.mockResolvedValue(existing());
     await handler.execute(
-      new UpdateTeacherCommand('t1', undefined, 'chenda@school.edu'),
+      new UpdateTeacherCommand(
+        'school-1',
+        't1',
+        undefined,
+        'chenda@school.edu',
+      ),
     );
     expect(userRepo.findOneBy).toHaveBeenCalledTimes(1);
   });

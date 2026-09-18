@@ -15,7 +15,8 @@ export class BulkMarkAttendanceHandler implements ICommandHandler<
   async execute(
     command: BulkMarkAttendanceCommand,
   ): Promise<AttendanceRecordEntity[]> {
-    const { studentIds, classroomId, date, status, markedByUserId } = command;
+    const { schoolId, studentIds, classroomId, date, status, markedByUserId } =
+      command;
     const results: AttendanceRecordEntity[] = [];
     for (const studentId of studentIds) {
       const record = await this.commandBus.execute<
@@ -23,6 +24,7 @@ export class BulkMarkAttendanceHandler implements ICommandHandler<
         AttendanceRecordEntity
       >(
         new MarkAttendanceCommand(
+          schoolId,
           studentId,
           classroomId,
           date,
