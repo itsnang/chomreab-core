@@ -104,7 +104,8 @@ export class EmailService {
         body: 'Click the button below to choose a new password. This link expires in an hour and works once.',
         ctaLabel: 'Reset password',
         ctaUrl: url,
-        footerNote: "If you didn't request this, you can safely ignore this email — your password won't change.",
+        footerNote:
+          "If you didn't request this, you can safely ignore this email — your password won't change.",
       }),
     });
   }
@@ -120,7 +121,8 @@ export class EmailService {
         body: 'One more step — confirm this address to start your 30-day trial. This link expires in 24 hours.',
         ctaLabel: 'Verify email',
         ctaUrl: url,
-        footerNote: "If you didn't create a Chomreab account, you can safely ignore this email.",
+        footerNote:
+          "If you didn't create a Chomreab account, you can safely ignore this email.",
       }),
     });
   }

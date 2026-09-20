@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import configuration from '../config/configuration';
 import { typeOrmConfigFactory } from './typeorm.config';
 import { SharedModule } from './shared/shared.module';
@@ -15,6 +16,7 @@ import { StaffModule } from './staff/staff.module';
 import { ReportsModule } from './reports/reports.module';
 import { SchoolModule } from './school/school.module';
 import { OperatorModule } from './operator/operator.module';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -23,6 +25,7 @@ import { OperatorModule } from './operator/operator.module';
       inject: [ConfigService],
       useFactory: typeOrmConfigFactory,
     }),
+    ScheduleModule.forRoot(),
     SharedModule,
     AuthModule,
     NotificationModule,
@@ -35,6 +38,7 @@ import { OperatorModule } from './operator/operator.module';
     ReportsModule,
     SchoolModule,
     OperatorModule,
+    BillingModule,
   ],
 })
 export class AppModule {}
