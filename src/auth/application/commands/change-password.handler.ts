@@ -23,6 +23,7 @@ export class ChangePasswordHandler implements ICommandHandler<
     const { userId, currentPassword, newPassword } = command;
 
     // passwordHash is `select: false` on the entity, so it has to be asked for.
+    // eslint-disable-next-line local/require-scoped-repository -- userId is the caller's own JWT sub, a single globally-unique row; see docs/adr/0010
     const user = await this.userRepository.findOne({
       where: { id: userId },
       select: { id: true, passwordHash: true },
@@ -47,6 +48,7 @@ export class ChangePasswordHandler implements ICommandHandler<
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
+    // eslint-disable-next-line local/require-scoped-repository -- userId is the caller's own row; see docs/adr/0010
     await this.userRepository.update(userId, {
       passwordHash,
       mustChangePassword: false,
@@ -55,6 +57,7 @@ export class ChangePasswordHandler implements ICommandHandler<
     // Every other session was authorised with the old password — including
     // whoever the temporary one was shared with — so drop them all. The caller
     // re-authenticates with the new password.
+    // eslint-disable-next-line local/require-scoped-repository -- userId is the caller's own row; see docs/adr/0010
     await this.refreshTokenRepository.delete({ userId });
   }
 }

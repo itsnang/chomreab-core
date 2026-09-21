@@ -72,7 +72,6 @@ Current modules: `auth` (admin/teacher login, refresh, password reset), `notific
 Provides:
 - `UserEntity` (`users` table) — `role: UserRole.ADMIN | UserRole.TEACHER`. There is no "parent" role: parents only interact via the Telegram bot, never log in.
 - `JwtAuthGuard` / `RolesGuard` / `AdminGuard`, `@Roles()` / `@CurrentUser()` decorators
-- `UserExistenceValidator` (async class-validator constraint)
 
 ### Inter-module communication
 

@@ -28,6 +28,7 @@ export class VerifyEmailHandler implements ICommandHandler<
   async execute(command: VerifyEmailCommand): Promise<void> {
     const tokenHash = createHash('sha256').update(command.token).digest('hex');
 
+    // eslint-disable-next-line local/require-scoped-repository -- looked up by the token's hash alone, unscoped by design; see comment above and docs/adr/0010
     const verification = await this.verificationRepository.findOne({
       where: { tokenHash, usedAt: IsNull() },
     });
@@ -39,6 +40,7 @@ export class VerifyEmailHandler implements ICommandHandler<
     await this.schoolRepository.update(verification.schoolId, {
       emailVerifiedAt: new Date(),
     });
+    // eslint-disable-next-line local/require-scoped-repository -- verification.id already names one specific, already-verified row; see docs/adr/0010
     await this.verificationRepository.update(verification.id, {
       usedAt: new Date(),
     });

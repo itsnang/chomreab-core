@@ -57,6 +57,7 @@ export class GenerateLinkingCodeHandler implements ICommandHandler<
       expiresAt,
       usedAt: null,
     });
+    // eslint-disable-next-line local/require-scoped-repository -- schoolId set explicitly above, from command.schoolId; see docs/adr/0010
     return this.linkingCodeRepository.save(linkingCode);
   }
 }

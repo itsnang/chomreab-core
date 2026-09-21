@@ -51,6 +51,7 @@ export class LoginAdminHandler implements ICommandHandler<
     // school did they mean?) left for when it's an actual complaint, not a
     // theoretical one. Whichever row matches is the source of truth for
     // schoolId below — never anything the caller could assert.
+    // eslint-disable-next-line local/require-scoped-repository -- schoolId isn't known before this lookup resolves it, see comment above and docs/adr/0010
     const user = await this.userRepository.findOne({
       where: { email },
       select: {
@@ -111,6 +112,7 @@ export class LoginAdminHandler implements ICommandHandler<
       Date.now() + ms(refreshExpiry as ms.StringValue),
     );
 
+    // eslint-disable-next-line local/require-scoped-repository -- schoolId is set explicitly below, from the already-resolved user; see docs/adr/0010
     await this.refreshTokenRepository.save({
       id: crypto.randomUUID(),
       schoolId: user.schoolId,

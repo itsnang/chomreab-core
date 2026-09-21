@@ -28,6 +28,7 @@ export class MigrateGroupChatHandler implements ICommandHandler<
     // Telegram chat, not a School boundary, and every ParentLink row at that
     // chat id — regardless of which School it belongs to — needs the same
     // new id or its messages start failing silently.
+    // eslint-disable-next-line local/require-scoped-repository -- deliberately cross-tenant, see comment above and docs/adr/0010
     await this.parentLinkRepository.update(
       { telegramChatId: command.oldChatId },
       { telegramChatId: command.newChatId },

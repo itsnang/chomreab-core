@@ -34,9 +34,12 @@ export interface SchoolScoped {
  * `execute()` — an ordinary object, not a DI-managed one.
  *
  * See the leak test in `scoped-repository.spec.ts` for the guarantee this is
- * meant to uphold, and `link-parent.handler.ts` for the one deliberate
- * exception in the whole codebase (resolving `schoolId` from a globally
- * unique linking code, before any `ScopedRepository` can be constructed).
+ * meant to uphold, and docs/adr/0010 for the full, reasoned list of every
+ * deliberate exception in the codebase — `link-parent.handler.ts` (resolving
+ * `schoolId` from a globally unique linking code, before any
+ * `ScopedRepository` can be constructed) is one of several, not the only
+ * one. A supplementary lint rule (`eslint-rules/require-scoped-repository.mjs`)
+ * flags any new direct call it isn't already aware of.
  */
 export class ScopedRepository<T extends SchoolScoped> {
   constructor(
