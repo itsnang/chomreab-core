@@ -23,7 +23,7 @@ describe('MarkInvoicePaidHandler', () => {
   let subscriptionRepo: { findOneBy: jest.Mock; update: jest.Mock };
 
   const OPEN_INVOICE = {
-    id: 'invoice-1',
+    id: 'a1b2c3d4-e5f6-4789-a123-456789abcdef',
     schoolId: 'school-1',
     subscriptionId: 'sub-1',
     activeStudentCount: 150,
@@ -67,8 +67,20 @@ describe('MarkInvoicePaidHandler', () => {
   it('rejects an invoice that does not exist', async () => {
     invoiceRepo.findOneBy.mockResolvedValue(null);
     await expect(
-      handler.execute(new MarkInvoicePaidCommand('missing')),
+      handler.execute(
+        new MarkInvoicePaidCommand('99999999-9999-4999-8999-999999999999'),
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
+    expect(paymentRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed invoiceId before ever querying the database — a uuid column would otherwise fail the query itself', async () => {
+    // CutLuy's own "send test event" feature sends reference_id:
+    // "test_reference", which is exactly this case — not a uuid at all.
+    await expect(
+      handler.execute(new MarkInvoicePaidCommand('test_reference')),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(invoiceRepo.findOneBy).not.toHaveBeenCalled();
     expect(paymentRepo.save).not.toHaveBeenCalled();
   });
 

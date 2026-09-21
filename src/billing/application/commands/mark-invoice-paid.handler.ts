@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
+import { isUUID } from 'class-validator';
 import { Repository } from 'typeorm';
 import {
   InvoiceEntity,
@@ -45,6 +46,17 @@ export class MarkInvoicePaidHandler implements ICommandHandler<
   ) {}
 
   async execute(command: MarkInvoicePaidCommand): Promise<void> {
+    // `id` is a uuid column — a malformed invoiceId (a CutLuy test webhook's
+    // literal "test_reference" reference_id, or any other garbage a caller
+    // might send) would otherwise reach findOneBy and fail as a raw
+    // QueryFailedError from Postgres, which the webhook controller doesn't
+    // know how to distinguish from a real failure and can't retry into
+    // success. Checking the shape first turns it into the same
+    // BadRequestException path a genuinely missing Invoice already takes.
+    if (!isUUID(command.invoiceId)) {
+      throw new BadRequestException('Invoice is not open for payment');
+    }
+
     const invoice = await this.invoiceRepository.findOneBy({
       id: command.invoiceId,
     });
