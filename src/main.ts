@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
 import { useContainer } from 'class-validator';
 
@@ -74,7 +75,16 @@ import { SnakeCaseInterceptor } from './shared/interceptors/snake-case.intercept
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // `rawBody: true` stashes the exact, unparsed request body on
+  // `request.rawBody` (via a `verify` callback on the existing global body
+  // parser) without changing how every other endpoint's `req.body` is
+  // parsed. CutLuy's webhook HMACs the raw bytes, not the re-serialized
+  // JSON — parsing and re-stringifying can reorder keys or change
+  // whitespace, and the signature would never match. Only the webhook
+  // controller reads `request.rawBody`; everything else is unaffected.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(
