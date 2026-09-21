@@ -28,20 +28,50 @@ function request(rawBody: string | undefined): RawBodyRequest<Request> {
   } as RawBodyRequest<Request>;
 }
 
+/** Matches a real CutLuy test delivery captured against the production
+ *  webhook on 2026-09-21 — an event envelope (`id`/`type`/`data.payment`),
+ *  not the flat `{id, status, reference_id, metadata}` shape the original
+ *  integration docs described. */
+function envelope(overrides: {
+  type?: string;
+  paymentId?: string;
+  status?: string;
+  referenceId?: string | null;
+  metadata?: { invoiceId?: string } | null;
+}): string {
+  // `??` would treat an explicit `null` override (used to test "no
+  // reference_id at all") the same as "not overridden" — check `in` instead
+  // so a deliberate null passes through.
+  const referenceId =
+    'referenceId' in overrides ? overrides.referenceId : 'invoice-1';
+  const metadata =
+    'metadata' in overrides
+      ? overrides.metadata
+      : { invoiceId: 'invoice-1', schoolId: 'school-1' };
+  return JSON.stringify({
+    id: 'evt_test_1',
+    type: overrides.type ?? 'payment.completed',
+    created: '2026-09-21T00:00:00.000Z',
+    data: {
+      payment: {
+        id: overrides.paymentId ?? 'PUETcMUOKStjZsCb',
+        status: overrides.status ?? 'paid',
+        amount: '15.00',
+        currency: 'USD',
+        reference_id: referenceId,
+        metadata,
+      },
+    },
+  });
+}
+
 describe('CutLuyWebhookController', () => {
   let controller: CutLuyWebhookController;
   let commandBus: { execute: jest.Mock };
   let configService: { getOrThrow: jest.Mock };
   let paymentRepo: { findOneBy: jest.Mock };
 
-  const PAYLOAD = JSON.stringify({
-    id: 'PUETcMUOKStjZsCb',
-    status: 'paid',
-    amount: '15.00',
-    currency: 'USD',
-    reference_id: 'invoice-1',
-    metadata: { invoiceId: 'invoice-1', schoolId: 'school-1' },
-  });
+  const PAYLOAD = envelope({});
 
   beforeEach(async () => {
     commandBus = { execute: jest.fn().mockResolvedValue(undefined) };
@@ -64,11 +94,7 @@ describe('CutLuyWebhookController', () => {
 
   it('accepts a validly-signed payment.completed event and marks the Invoice paid', async () => {
     const signature = sign(now(), PAYLOAD);
-    await controller.handleWebhook(
-      request(PAYLOAD),
-      signature,
-      'payment.completed',
-    );
+    await controller.handleWebhook(request(PAYLOAD), signature);
 
     expect(commandBus.execute).toHaveBeenCalledWith(
       new MarkInvoicePaidCommand(
@@ -81,11 +107,7 @@ describe('CutLuyWebhookController', () => {
 
   it('rejects a request with no signature header at all', async () => {
     await expect(
-      controller.handleWebhook(
-        request(PAYLOAD),
-        undefined,
-        'payment.completed',
-      ),
+      controller.handleWebhook(request(PAYLOAD), undefined),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(commandBus.execute).not.toHaveBeenCalled();
   });
@@ -93,21 +115,13 @@ describe('CutLuyWebhookController', () => {
   it('rejects a request with no raw body captured', async () => {
     const signature = sign(now(), PAYLOAD);
     await expect(
-      controller.handleWebhook(
-        request(undefined),
-        signature,
-        'payment.completed',
-      ),
+      controller.handleWebhook(request(undefined), signature),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('rejects a malformed signature header', async () => {
     await expect(
-      controller.handleWebhook(
-        request(PAYLOAD),
-        'not-a-real-signature',
-        'payment.completed',
-      ),
+      controller.handleWebhook(request(PAYLOAD), 'not-a-real-signature'),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -117,11 +131,7 @@ describe('CutLuyWebhookController', () => {
       .digest('hex');
     const signature = `t=${now()},v1=${wrongHmac}`;
     await expect(
-      controller.handleWebhook(
-        request(PAYLOAD),
-        signature,
-        'payment.completed',
-      ),
+      controller.handleWebhook(request(PAYLOAD), signature),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(commandBus.execute).not.toHaveBeenCalled();
   });
@@ -130,11 +140,7 @@ describe('CutLuyWebhookController', () => {
     const signature = sign(now(), PAYLOAD);
     const tamperedBody = PAYLOAD.replace('"paid"', '"failed"');
     await expect(
-      controller.handleWebhook(
-        request(tamperedBody),
-        signature,
-        'payment.completed',
-      ),
+      controller.handleWebhook(request(tamperedBody), signature),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -142,81 +148,70 @@ describe('CutLuyWebhookController', () => {
     const staleTimestamp = now() - 301;
     const signature = sign(staleTimestamp, PAYLOAD);
     await expect(
-      controller.handleWebhook(
-        request(PAYLOAD),
-        signature,
-        'payment.completed',
-      ),
+      controller.handleWebhook(request(PAYLOAD), signature),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(commandBus.execute).not.toHaveBeenCalled();
   });
 
   it('accepts a timestamp just under the 5-minute window', async () => {
     const signature = sign(now() - 299, PAYLOAD);
-    await controller.handleWebhook(
-      request(PAYLOAD),
-      signature,
-      'payment.completed',
-    );
+    await controller.handleWebhook(request(PAYLOAD), signature);
     expect(commandBus.execute).toHaveBeenCalled();
   });
 
   it('rejects a timestamp from the future beyond the tolerance window', async () => {
     const signature = sign(now() + 301, PAYLOAD);
     await expect(
-      controller.handleWebhook(
-        request(PAYLOAD),
-        signature,
-        'payment.completed',
-      ),
+      controller.handleWebhook(request(PAYLOAD), signature),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('does not fulfil a payment.completed-headed delivery whose signed body status is not paid (a captured-and-replayed scanned/expired/failed delivery with the header swapped)', async () => {
-    // The event header is NOT part of the signed material (`${t}.${rawBody}`
-    // only) — a real CutLuy delivery for a payment that was only scanned,
-    // captured and replayed with the header changed to payment.completed,
-    // must still not fulfil, because the signed body's own status says
-    // "scanned", not "paid".
-    const scannedPayload = PAYLOAD.replace('"paid"', '"scanned"');
+  it('does not fulfil a payment.completed envelope whose nested Payment.status is not paid (a captured-and-replayed scanned/expired/failed delivery with the envelope type swapped)', async () => {
+    // `type` and `status` both live inside the signed body — a real CutLuy
+    // delivery for a payment that was only scanned, captured and replayed
+    // with `type` changed to payment.completed, must still not fulfil,
+    // because the signed Payment's own status says "scanned", not "paid".
+    const scannedPayload = envelope({ status: 'scanned' });
     const signature = sign(now(), scannedPayload);
     const result = await controller.handleWebhook(
       request(scannedPayload),
       signature,
-      'payment.completed',
     );
     expect(result).toEqual({ ok: true });
     expect(commandBus.execute).not.toHaveBeenCalled();
   });
 
   it('acknowledges but does not fulfil on payment.scanned', async () => {
-    const signature = sign(now(), PAYLOAD);
+    const scannedEnvelope = envelope({
+      type: 'payment.scanned',
+      status: 'scanned',
+    });
+    const signature = sign(now(), scannedEnvelope);
     const result = await controller.handleWebhook(
-      request(PAYLOAD),
+      request(scannedEnvelope),
       signature,
-      'payment.scanned',
     );
     expect(result).toEqual({ ok: true });
     expect(commandBus.execute).not.toHaveBeenCalled();
   });
 
   it('acknowledges but does not fulfil on payment.expired', async () => {
-    const signature = sign(now(), PAYLOAD);
-    await controller.handleWebhook(
-      request(PAYLOAD),
-      signature,
-      'payment.expired',
-    );
+    const expiredEnvelope = envelope({
+      type: 'payment.expired',
+      status: 'expired',
+    });
+    const signature = sign(now(), expiredEnvelope);
+    await controller.handleWebhook(request(expiredEnvelope), signature);
     expect(commandBus.execute).not.toHaveBeenCalled();
   });
 
   it('acknowledges but does not fulfil on payment.failed', async () => {
-    const signature = sign(now(), PAYLOAD);
-    await controller.handleWebhook(
-      request(PAYLOAD),
-      signature,
-      'payment.failed',
-    );
+    const failedEnvelope = envelope({
+      type: 'payment.failed',
+      status: 'failed',
+    });
+    const signature = sign(now(), failedEnvelope);
+    await controller.handleWebhook(request(failedEnvelope), signature);
     expect(commandBus.execute).not.toHaveBeenCalled();
   });
 
@@ -226,11 +221,7 @@ describe('CutLuyWebhookController', () => {
       cutluyReference: 'PUETcMUOKStjZsCb',
     });
     const signature = sign(now(), PAYLOAD);
-    const result = await controller.handleWebhook(
-      request(PAYLOAD),
-      signature,
-      'payment.completed',
-    );
+    const result = await controller.handleWebhook(request(PAYLOAD), signature);
     expect(result).toEqual({ ok: true });
     expect(commandBus.execute).not.toHaveBeenCalled();
   });
@@ -247,11 +238,7 @@ describe('CutLuyWebhookController', () => {
       new BadRequestException('Invoice is not open for payment'),
     );
     const signature = sign(now(), PAYLOAD);
-    const result = await controller.handleWebhook(
-      request(PAYLOAD),
-      signature,
-      'payment.completed',
-    );
+    const result = await controller.handleWebhook(request(PAYLOAD), signature);
     expect(result).toEqual({ ok: true });
   });
 
@@ -265,11 +252,7 @@ describe('CutLuyWebhookController', () => {
     );
     const signature = sign(now(), PAYLOAD);
     await expect(
-      controller.handleWebhook(
-        request(PAYLOAD),
-        signature,
-        'payment.completed',
-      ),
+      controller.handleWebhook(request(PAYLOAD), signature),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -277,26 +260,16 @@ describe('CutLuyWebhookController', () => {
     commandBus.execute.mockRejectedValue(new Error('database connection lost'));
     const signature = sign(now(), PAYLOAD);
     await expect(
-      controller.handleWebhook(
-        request(PAYLOAD),
-        signature,
-        'payment.completed',
-      ),
+      controller.handleWebhook(request(PAYLOAD), signature),
     ).rejects.toThrow('database connection lost');
   });
 
   it('rejects a payload with no reference_id and no metadata.invoiceId to key off', async () => {
-    const bodyWithNoInvoice = JSON.stringify({
-      id: 'PUETc',
-      status: 'paid',
-      amount: '1.00',
-      currency: 'USD',
-    });
+    const bodyWithNoInvoice = envelope({ referenceId: null, metadata: null });
     const signature = sign(now(), bodyWithNoInvoice);
     const result = await controller.handleWebhook(
       request(bodyWithNoInvoice),
       signature,
-      'payment.completed',
     );
     // Acknowledged (retrying can't fix a structurally incomplete payload),
     // but never dispatched as if it were a real, fulfillable payment.
@@ -305,19 +278,13 @@ describe('CutLuyWebhookController', () => {
   });
 
   it('falls back to metadata.invoiceId when reference_id is absent', async () => {
-    const body = JSON.stringify({
-      id: 'PUETc',
-      status: 'paid',
-      amount: '1.00',
-      currency: 'USD',
+    const body = envelope({
+      paymentId: 'PUETc',
+      referenceId: null,
       metadata: { invoiceId: 'invoice-9' },
     });
     const signature = sign(now(), body);
-    await controller.handleWebhook(
-      request(body),
-      signature,
-      'payment.completed',
-    );
+    await controller.handleWebhook(request(body), signature);
     expect(commandBus.execute).toHaveBeenCalledWith(
       new MarkInvoicePaidCommand(
         'invoice-9',
