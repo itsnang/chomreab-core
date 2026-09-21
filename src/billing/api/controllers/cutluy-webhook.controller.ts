@@ -30,20 +30,32 @@ const MAX_CLOCK_SKEW_SECONDS = 300;
  *  the code without ever paying. */
 const FULFILLING_EVENT = 'payment.completed';
 
-/** CutLuy's own docs sign only `${t}.${rawBody}` — the `X-CutLuy-Event`
- *  header is not part of that signed material. Trusting the header alone
- *  would let a genuine, validly-signed `payment.scanned` (or expired/failed)
- *  delivery — real body, real signature, captured and replayed with just the
- *  header swapped — fulfil an Invoice that was never actually paid. `status`
- *  lives inside the signed body, so cross-checking it against the header
- *  closes that gap without depending on anything CutLuy doesn't sign. */
+/** A real delivery's `data.payment.status`, not merely its `type`, is what
+ *  proves money moved — matches `FULFILLING_EVENT` below. Both live inside
+ *  the signed body (`${t}.${rawBody}`), so cross-checking one against the
+ *  other closes a captured-and-replay gap without depending on anything
+ *  CutLuy doesn't sign (unlike the `X-CutLuy-Event` header, which is not
+ *  covered by the signature and is not trusted here at all). */
 const PAID_STATUS = 'paid';
 
-interface CutLuyWebhookPayload {
+/** CutLuy wraps every delivery in an event envelope — `id`/`type` describe
+ *  the event itself, the actual Payment lives nested under `data.payment`.
+ *  Confirmed against a real CutLuy test delivery on 2026-09-21: the payload
+ *  is NOT the flat `{id, status, reference_id, metadata}` shape the original
+ *  integration docs described — `payload.status` doesn't exist at the root,
+ *  so that flat parsing silently treated every delivery as unfulfillable and
+ *  never once called MarkInvoicePaidCommand. */
+interface CutLuyWebhookEnvelope {
   id: string;
-  status: string;
-  reference_id?: string | null;
-  metadata?: { invoiceId?: string } | null;
+  type: string;
+  data: {
+    payment: {
+      id: string;
+      status: string;
+      reference_id?: string | null;
+      metadata?: { invoiceId?: string } | null;
+    };
+  };
 }
 
 @ApiExcludeController()
@@ -63,7 +75,6 @@ export class CutLuyWebhookController {
   async handleWebhook(
     @Req() request: RawBodyRequest<Request>,
     @Headers('x-cutluy-signature') signatureHeader: string | undefined,
-    @Headers('x-cutluy-event') eventHeader: string | undefined,
   ): Promise<{ ok: true }> {
     const raw = request.rawBody;
     if (!raw || !signatureHeader) {
@@ -72,24 +83,24 @@ export class CutLuyWebhookController {
 
     this.verifySignature(raw, signatureHeader);
 
-    const payload = JSON.parse(raw.toString('utf8')) as CutLuyWebhookPayload;
+    const envelope = JSON.parse(raw.toString('utf8')) as CutLuyWebhookEnvelope;
+    const payment = envelope.data.payment;
 
-    // Both the event header AND the signed body's own status must agree the
-    // payment completed — see the PAID_STATUS comment above for why the
-    // header alone isn't enough. Anything else needs no action here, and
-    // returning non-2xx for one would just cost CutLuy 8 retries chasing an
-    // event we were never going to act on.
-    if (eventHeader !== FULFILLING_EVENT || payload.status !== PAID_STATUS) {
+    // Both the envelope's own `type` and the nested Payment's `status` must
+    // agree the payment completed — see PAID_STATUS above for why. Anything
+    // else needs no action here, and returning non-2xx for one would just
+    // cost CutLuy 8 retries chasing an event we were never going to act on.
+    if (envelope.type !== FULFILLING_EVENT || payment.status !== PAID_STATUS) {
       return { ok: true };
     }
 
-    const invoiceId = payload.reference_id ?? payload.metadata?.invoiceId;
+    const invoiceId = payment.reference_id ?? payment.metadata?.invoiceId;
     if (!invoiceId) {
       // A structurally incomplete payload retries can't fix — set by
       // InitiateCutLuyCheckoutHandler on every payment it creates, so this
       // should never actually happen for a payment this app originated.
       this.logger.error(
-        `CutLuy payment.completed webhook for ${payload.id} carries no reference_id or metadata.invoiceId — cannot identify which Invoice to settle`,
+        `CutLuy payment.completed webhook for ${payment.id} carries no reference_id or metadata.invoiceId — cannot identify which Invoice to settle`,
       );
       return { ok: true };
     }
@@ -100,7 +111,7 @@ export class CutLuyWebhookController {
     // keeps the common case (an honest redelivery, not a true race) from
     // re-running the command at all.
     const alreadyProcessed = await this.paymentRepository.findOneBy({
-      cutluyReference: payload.id,
+      cutluyReference: payment.id,
     });
     if (alreadyProcessed) {
       return { ok: true };
@@ -110,8 +121,8 @@ export class CutLuyWebhookController {
       await this.commandBus.execute(
         new MarkInvoicePaidCommand(
           invoiceId,
-          payload.id,
-          payload as unknown as Record<string, unknown>,
+          payment.id,
+          envelope as unknown as Record<string, unknown>,
         ),
       );
     } catch (error) {
@@ -125,11 +136,11 @@ export class CutLuyWebhookController {
       // actually exists now is what tells the two cases apart.
       if (error instanceof BadRequestException) {
         const resolvedByRace = await this.paymentRepository.findOneBy({
-          cutluyReference: payload.id,
+          cutluyReference: payment.id,
         });
         if (resolvedByRace) {
           this.logger.warn(
-            `MarkInvoicePaidCommand rejected webhook for invoice ${invoiceId} (payment ${payload.id}) — resolved by a concurrent delivery: ${error.message}`,
+            `MarkInvoicePaidCommand rejected webhook for invoice ${invoiceId} (payment ${payment.id}) — resolved by a concurrent delivery: ${error.message}`,
           );
         } else {
           throw error;
