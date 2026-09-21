@@ -52,6 +52,19 @@ export default () => {
     );
   }
 
+  // A missing webhook secret still fails *closed* (timingSafeEqual against
+  // an empty buffer never matches), so this isn't a security gap the way a
+  // missing Telegram secret would be — but a deployment that's configured to
+  // take real payments and silently can never confirm one is its own kind of
+  // outage, just a quiet one. Only required once CUTLUY_API_KEY is actually
+  // set, so local development stays untouched.
+  if (process.env.CUTLUY_API_KEY && !process.env.CUTLUY_WEBHOOK_SECRET) {
+    throw new Error(
+      'CUTLUY_WEBHOOK_SECRET must be set alongside CUTLUY_API_KEY — without ' +
+        'it, every CutLuy payment webhook is rejected and no payment is ever confirmed.',
+    );
+  }
+
   return {
     port: parseInt(process.env.PORT ?? '3000', 10),
     publicUrl,
@@ -89,5 +102,10 @@ export default () => {
     // Where a person actually clicks — the admin web app, not this API.
     // Verification and password-reset links point here.
     adminAppUrl: (process.env.ADMIN_APP_URL ?? 'http://localhost:3001').replace(/\/+$/, ''),
+    cutluy: {
+      apiKey: process.env.CUTLUY_API_KEY,
+      webhookSecret: process.env.CUTLUY_WEBHOOK_SECRET,
+      baseUrl: (process.env.CUTLUY_BASE_URL ?? 'https://cutluy.com').replace(/\/+$/, ''),
+    },
   };
 };
