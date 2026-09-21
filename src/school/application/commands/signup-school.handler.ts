@@ -57,6 +57,7 @@ export class SignupSchoolHandler implements ICommandHandler<
     });
 
     const passwordHash = await bcrypt.hash(command.password, 12);
+    // eslint-disable-next-line local/require-scoped-repository -- the School is being created in this same handler, nothing to scope from yet; see docs/adr/0010
     await this.userRepository.save({
       id: crypto.randomUUID(),
       schoolId,
@@ -71,6 +72,7 @@ export class SignupSchoolHandler implements ICommandHandler<
 
     const token = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(token).digest('hex');
+    // eslint-disable-next-line local/require-scoped-repository -- the School is being created in this same handler, nothing to scope from yet; see docs/adr/0010
     await this.verificationRepository.save({
       id: crypto.randomUUID(),
       schoolId,
