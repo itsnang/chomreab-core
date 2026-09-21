@@ -14,6 +14,7 @@ import { GenerateRenewalInvoicesCommand } from './application/commands/generate-
 import { TransitionOverdueInvoicesHandler } from './application/commands/transition-overdue-invoices.handler';
 import { TransitionOverdueInvoicesCommand } from './application/commands/transition-overdue-invoices.command';
 import { InitiateCutLuyCheckoutHandler } from './application/commands/initiate-cutluy-checkout.handler';
+import { GetBillingStatusHandler } from './application/queries/get-billing-status.handler';
 import { CutLuyClient } from './infrastructure/services/cutluy-client';
 import { BillingController } from './api/controllers/billing.controller';
 import { CutLuyWebhookController } from './api/controllers/cutluy-webhook.controller';
@@ -58,6 +59,7 @@ class DailyBillingScheduler {
     GenerateRenewalInvoicesHandler,
     TransitionOverdueInvoicesHandler,
     InitiateCutLuyCheckoutHandler,
+    GetBillingStatusHandler,
     CutLuyClient,
     DailyBillingScheduler,
   ],
