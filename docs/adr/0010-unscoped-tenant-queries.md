@@ -1,0 +1,27 @@
+# Every deliberate exception to ScopedRepository, in one place
+
+`ScopedRepository` (`src/shared/database/scoped-repository.ts`) is the structural guarantee the multi-tenant design leans on: bind it to one School, and its method signatures have no type-level slot for `schoolId` at all, so a handler cannot compile a query that crosses a tenant boundary. Every handler that reads or writes a tenant-scoped table is expected to go through it.
+
+A full audit of the codebase (Phase 6) found roughly two dozen call sites that touch a tenant-scoped repository directly instead. None of them leak a row across a School boundary. They fall into three shapes, and this ADR exists so the next person auditing this codebase doesn't have to re-derive that conclusion from scratch.
+
+**Lookups before a School is known.** Login (`login-admin.handler.ts`, `login-teacher.handler.ts`), password reset (`forgot-password.handler.ts`), and self-serve signup verification (`verify-email.handler.ts`) all resolve their first row — a `User` by email, a token by its hash — before any `schoolId` exists to scope by. That lookup *is* how the School gets discovered, the same reasoning `linking-code.entity.ts` already documents for `link-parent.handler.ts`'s unscoped code lookup: a parent's `/link CODE` and a founder's login both carry no tenant identifier on their own.
+
+**Lookups and writes keyed by a globally-unique primary key.** `change-password.handler.ts` updates `userId` from the caller's own JWT `sub`; `reset-password.handler.ts` acts on `resetToken.userId` after that token was already resolved to one specific row; `login-admin.handler.ts` fetches a School by `user.schoolId`, its own primary key. None of these filter a collection by anything other than a single already-resolved UUID — there is no cross-tenant row for the query to accidentally return, because a UUID primary key can't collide between Schools in the first place. Scoping is structurally moot here, not skipped.
+
+**Deliberately cross-tenant by design.** `migrate-group-chat.handler.ts` rewrites every `ParentLink` row at a Telegram chat id, regardless of which School owns it — a chat id rewrite is about the physical Telegram chat, not a School boundary. `get-attendance-status.handler.ts` (`/status`) fans out across every `ParentLink` a chat holds, since one parent can be linked into more than one School (ADR-0007's shared bot made this the ordinary case, not an edge case) — it re-enters `ScopedRepository` discipline immediately per-link, once each row's own `schoolId` is in hand.
+
+A fourth category exists only where a School is being *created*: `signup-school.handler.ts` writes the founding `School`, `User`, and verification-token rows by hand, `schoolId` set explicitly on each, because there is nothing to scope from — the School itself doesn't exist yet at the top of that handler.
+
+## Dead code removed along the way, not a fifth exception
+
+`UserExistenceValidator` checked whether a `userId` exists at all, with no `schoolId` check — and unlike everything above, that wasn't a deliberate, reasoned exception, it was simply never wired to any DTO field (`grep` for its usage returned nothing). Removed in this same change rather than left as a footgun for whoever eventually does attach it to a real field without adding the scoping it never had.
+
+## SchoolSettings' primary key
+
+Separately, this audit confirms `SchoolSettingsEntity` (Phase 5) already uses `schoolId` as its primary key directly — `@PrimaryColumn({ type: 'uuid' }) schoolId: string`, no separate generated `id`. The relationship between a School and its settings row is exactly 1:1 forever, and nothing in the codebase ever addresses a settings row by any identity other than the School it belongs to, so a second id would only be a redundant index. This replaces the single-tenant era's hardcoded singleton row (`id = 'default'`). No further change needed here; recorded so this ADR is the one place both Phase 5 and Phase 6 decisions live.
+
+## What this doesn't cover
+
+Writes that manually splice `schoolId` into the payload instead of routing through `ScopedRepository.save()` — `refresh-token.handler.ts`, `forgot-password.handler.ts`, `signup-school.handler.ts` — aren't a scoping bug (the value written is correct), but they don't get `ScopedRepository`'s type-level guarantee either, just a human remembering to include the field. That's a style inconsistency this ADR doesn't try to resolve; a supplementary lint rule (see `eslint.config.mjs`, the `local/require-scoped-repository` rule) now flags any new direct method call on a tenant-scoped repository outside these named exceptions, so the list above is meant to be exhaustive as of this writing — a lint failure on a call site not named here is a real finding, not noise to suppress.
+
+Worth being honest about what that lint rule actually buys, since it's easy to read it as equivalent to `ScopedRepository`'s guarantee: it isn't. `ScopedRepository` makes an unscoped query *impossible to compile* — there's no `schoolId` parameter slot to leave out. The lint rule only checks one line's call shape at lint time, and an `eslint-disable-next-line` comment silences it permanently, with nothing re-checking that the reasoning in the comment still holds if the code around it later changes. It's a real backstop against a handler that forgets `ScopedRepository` exists; it is not a substitute for `ScopedRepository` itself, and every exception named above still needs a human to re-read it if the surrounding handler is ever substantially rewritten.

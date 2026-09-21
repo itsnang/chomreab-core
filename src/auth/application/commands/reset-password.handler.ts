@@ -28,6 +28,7 @@ export class ResetPasswordHandler implements ICommandHandler<
 
     const tokenHash = createHash('sha256').update(token).digest('hex');
 
+    // eslint-disable-next-line local/require-scoped-repository -- looked up by the token's hash alone, unscoped, same shape as verify-email.handler.ts; see docs/adr/0010
     const resetToken = await this.passwordResetTokenRepository.findOne({
       where: { tokenHash, usedAt: IsNull() },
     });
@@ -38,10 +39,13 @@ export class ResetPasswordHandler implements ICommandHandler<
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
 
+    // eslint-disable-next-line local/require-scoped-repository -- resetToken.userId already names one specific, already-verified row; see docs/adr/0010
     await this.userRepository.update(resetToken.userId, { passwordHash });
+    // eslint-disable-next-line local/require-scoped-repository -- resetToken.id already names one specific, already-verified row; see docs/adr/0010
     await this.passwordResetTokenRepository.update(resetToken.id, {
       usedAt: new Date(),
     });
+    // eslint-disable-next-line local/require-scoped-repository -- resetToken.userId already names one specific, already-verified row; see docs/adr/0010
     await this.refreshTokenRepository.delete({ userId: resetToken.userId });
   }
 }

@@ -48,6 +48,7 @@ export class RefreshTokenHandler implements ICommandHandler<
       throw new UnauthorizedException('Invalid refresh token');
     }
 
+    // eslint-disable-next-line local/require-scoped-repository -- schoolId is already in the where-clause below, from the verified JWT payload; see docs/adr/0010
     const storedTokens = await this.refreshTokenRepository.find({
       where: {
         schoolId: payload.schoolId,
@@ -68,6 +69,7 @@ export class RefreshTokenHandler implements ICommandHandler<
       throw new UnauthorizedException('Invalid refresh token');
     }
 
+    // eslint-disable-next-line local/require-scoped-repository -- matched was already resolved from the schoolId-scoped query above; see docs/adr/0010
     await this.refreshTokenRepository.delete({ id: matched.id });
 
     const accessSecret =
@@ -97,6 +99,7 @@ export class RefreshTokenHandler implements ICommandHandler<
       Date.now() + ms(refreshExpiry as ms.StringValue),
     );
 
+    // eslint-disable-next-line local/require-scoped-repository -- schoolId is set explicitly below, from the verified JWT payload; see docs/adr/0010
     await this.refreshTokenRepository.save({
       id: crypto.randomUUID(),
       schoolId: payload.schoolId,

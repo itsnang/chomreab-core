@@ -23,12 +23,14 @@ export class ForgotPasswordHandler implements ICommandHandler<
   async execute(command: ForgotPasswordCommand): Promise<void> {
     const { email } = command;
 
+    // eslint-disable-next-line local/require-scoped-repository -- schoolId isn't known before this lookup resolves it; see docs/adr/0010
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user) return;
 
     const token = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(token).digest('hex');
 
+    // eslint-disable-next-line local/require-scoped-repository -- schoolId is set explicitly below, from the just-resolved user; see docs/adr/0010
     await this.passwordResetTokenRepository.save({
       id: randomUUID(),
       schoolId: user.schoolId,

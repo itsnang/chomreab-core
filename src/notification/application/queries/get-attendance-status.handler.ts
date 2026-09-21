@@ -30,6 +30,7 @@ export class GetAttendanceStatusHandler implements IQueryHandler<
     // A chat's links can span more than one School (one parent, two
     // institutions is ordinary here), so there is no single scope for this
     // whole query; each link is scoped by its own schoolId as it's read.
+    // eslint-disable-next-line local/require-scoped-repository -- deliberately cross-tenant, see comment above and docs/adr/0010
     const links = await this.parentLinkRepository.find({
       where: { telegramChatId: query.telegramChatId },
     });

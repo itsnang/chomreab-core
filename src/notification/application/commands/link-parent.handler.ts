@@ -39,6 +39,7 @@ export class LinkParentHandler implements ICommandHandler<
     // specifically so this resolves unambiguously. Everything downstream —
     // once linkingCode.schoolId is known — re-enters ScopedRepository
     // discipline immediately.
+    // eslint-disable-next-line local/require-scoped-repository -- unscoped by design, see comment above and docs/adr/0010
     const linkingCode = await this.linkingCodeRepository.findOneBy({
       code: code.toUpperCase(),
     });
@@ -90,6 +91,7 @@ export class LinkParentHandler implements ICommandHandler<
     // or re-add it after an accidental removal, until it expires on its own.
     if (chatType === 'private') {
       linkingCode.usedAt = new Date();
+      // eslint-disable-next-line local/require-scoped-repository -- mutating the same already-resolved row above; see docs/adr/0010
       await this.linkingCodeRepository.save(linkingCode);
     }
 
