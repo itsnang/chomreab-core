@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -21,13 +21,14 @@ import { PERIOD_DAYS, RATE_CENTS_PER_STUDENT } from '../../domain/pricing';
 /**
  * Creates a Subscription and its first Invoice together — see
  * CONTEXT.md's "Subscription" entry for why a Subscription with no Invoice
- * behind it is not a state this domain allows. Called from wherever a School
- * decides to start paying (Phase 3's CutLuy checkout initiation calls this
- * before redirecting); nothing here talks to a payment gateway.
+ * behind it is not a state this domain allows. Called from
+ * `POST /billing/subscribe`, which a School's own admin reaches whenever they
+ * choose to convert (during or after the 30-day trial — see CONTEXT.md's
+ * "Trial" entry); nothing here talks to a payment gateway.
  *
- * Does not check for an existing Subscription — a School reaching this
- * command twice (a double-click, a retried request) is a caller bug to fix
- * at the call site, not a case this handler silently absorbs.
+ * Rejects a School that already has a Subscription — this is a one-time
+ * conversion, and a double-click on "Subscribe now" (or a retried request)
+ * must not create two.
  */
 @Injectable()
 @CommandHandler(StartSubscriptionCommand)
@@ -57,6 +58,11 @@ export class StartSubscriptionHandler implements ICommandHandler<
       this.invoiceRepository,
       command.schoolId,
     );
+
+    const existing = await subscriptions.findOneBy({});
+    if (existing) {
+      throw new BadRequestException('This School already has a Subscription');
+    }
 
     const now = new Date();
     const periodEnd = new Date(
