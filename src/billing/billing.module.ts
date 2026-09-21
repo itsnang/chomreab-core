@@ -1,5 +1,6 @@
 import { Injectable, Module } from '@nestjs/common';
 import { CommandBus, CqrsModule } from '@nestjs/cqrs';
+import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { SubscriptionEntity } from './infrastructure/entities/subscription.entity';
@@ -12,6 +13,10 @@ import { GenerateRenewalInvoicesHandler } from './application/commands/generate-
 import { GenerateRenewalInvoicesCommand } from './application/commands/generate-renewal-invoices.command';
 import { TransitionOverdueInvoicesHandler } from './application/commands/transition-overdue-invoices.handler';
 import { TransitionOverdueInvoicesCommand } from './application/commands/transition-overdue-invoices.command';
+import { InitiateCutLuyCheckoutHandler } from './application/commands/initiate-cutluy-checkout.handler';
+import { CutLuyClient } from './infrastructure/services/cutluy-client';
+import { BillingController } from './api/controllers/billing.controller';
+import { CutLuyWebhookController } from './api/controllers/cutluy-webhook.controller';
 
 /** The only thing a `@Cron` decorator can usefully own is "when" — the state
  *  machine itself lives in the two handlers it calls, each driven by a fixed
@@ -38,6 +43,7 @@ class DailyBillingScheduler {
 @Module({
   imports: [
     CqrsModule,
+    JwtModule.register({}),
     TypeOrmModule.forFeature([
       SubscriptionEntity,
       InvoiceEntity,
@@ -45,18 +51,19 @@ class DailyBillingScheduler {
       StudentEntity,
     ]),
   ],
+  controllers: [BillingController, CutLuyWebhookController],
   providers: [
     StartSubscriptionHandler,
     MarkInvoicePaidHandler,
     GenerateRenewalInvoicesHandler,
     TransitionOverdueInvoicesHandler,
+    InitiateCutLuyCheckoutHandler,
+    CutLuyClient,
     DailyBillingScheduler,
   ],
   // Nothing to export: CommandBus is a shared singleton once CqrsModule is
   // in the graph (every feature module imports it locally, same as here —
   // see school.module.ts), and command routing is global regardless of
-  // which module registered the handler. A future caller (Phase 3's CutLuy
-  // webhook controller) reaches these handlers by importing CqrsModule in
-  // its own module, not by importing this one.
+  // which module registered the handler.
 })
 export class BillingModule {}
