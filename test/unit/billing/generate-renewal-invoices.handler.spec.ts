@@ -94,10 +94,13 @@ describe('GenerateRenewalInvoicesHandler', () => {
 
     await handler.execute(new GenerateRenewalInvoicesCommand(NOW));
 
-    expect(subscriptionRepo.update).toHaveBeenCalledWith('sub-1', {
-      currentPeriodStart: ACTIVE_SUBSCRIPTION.currentPeriodEnd,
-      currentPeriodEnd: new Date('2026-03-31T00:00:00Z'),
-    });
+    expect(subscriptionRepo.update).toHaveBeenCalledWith(
+      { id: 'sub-1', schoolId: 'school-1' },
+      {
+        currentPeriodStart: ACTIVE_SUBSCRIPTION.currentPeriodEnd,
+        currentPeriodEnd: new Date('2026-03-31T00:00:00Z'),
+      },
+    );
   });
 
   it('rolls an annual plan a full year out', async () => {
@@ -107,10 +110,13 @@ describe('GenerateRenewalInvoicesHandler', () => {
 
     await handler.execute(new GenerateRenewalInvoicesCommand(NOW));
 
-    expect(subscriptionRepo.update).toHaveBeenCalledWith('sub-1', {
-      currentPeriodStart: ACTIVE_SUBSCRIPTION.currentPeriodEnd,
-      currentPeriodEnd: new Date('2027-03-01T00:00:00Z'),
-    });
+    expect(subscriptionRepo.update).toHaveBeenCalledWith(
+      { id: 'sub-1', schoolId: 'school-1' },
+      {
+        currentPeriodStart: ACTIVE_SUBSCRIPTION.currentPeriodEnd,
+        currentPeriodEnd: new Date('2027-03-01T00:00:00Z'),
+      },
+    );
   });
 
   it('does nothing when no Subscription has reached the end of its period', async () => {

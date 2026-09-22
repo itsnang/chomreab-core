@@ -110,6 +110,14 @@ export class CutLuyWebhookController {
     // for the race between this check and the write below; this check just
     // keeps the common case (an honest redelivery, not a true race) from
     // re-running the command at all.
+    //
+    // Unscoped: cutluyReference carries a *global* unique index (see
+    // payment.entity.ts), and there's no schoolId in hand yet without an
+    // extra Invoice fetch this check doesn't otherwise need — structurally
+    // moot to scope further, the same reasoning docs/adr/0010's "keyed by a
+    // globally-unique primary key" category applies to a unique secondary
+    // key here, not just a PK.
+    // eslint-disable-next-line local/require-scoped-repository
     const alreadyProcessed = await this.paymentRepository.findOneBy({
       cutluyReference: payment.id,
     });
@@ -135,6 +143,9 @@ export class CutLuyWebhookController {
       // CutLuy as handled when it was not; re-checking that a Payment
       // actually exists now is what tells the two cases apart.
       if (error instanceof BadRequestException) {
+        // Same globally-unique-column reasoning as the idempotency check
+        // above.
+        // eslint-disable-next-line local/require-scoped-repository
         const resolvedByRace = await this.paymentRepository.findOneBy({
           cutluyReference: payment.id,
         });
