@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
@@ -8,8 +8,10 @@ import { CurrentSchoolId } from '../../../shared/decorators/current-school-id.de
 import { UserRole } from '../../../shared/entities/user.entity';
 import { InitiateCutLuyCheckoutCommand } from '../../application/commands/initiate-cutluy-checkout.command';
 import type { CutLuyCheckout } from '../../application/commands/initiate-cutluy-checkout.handler';
+import { StartSubscriptionCommand } from '../../application/commands/start-subscription.command';
 import { GetBillingStatusQuery } from '../../application/queries/get-billing-status.query';
 import type { BillingStatus } from '../../application/queries/get-billing-status.handler';
+import { StartSubscriptionDto } from '../dto/start-subscription.dto';
 
 @ApiTags('billing')
 @ApiBearerAuth()
@@ -30,6 +32,22 @@ export class BillingController {
   status(@CurrentSchoolId() schoolId: string): Promise<BillingStatus> {
     return this.queryBus.execute<GetBillingStatusQuery, BillingStatus>(
       new GetBillingStatusQuery(schoolId),
+    );
+  }
+
+  @ApiOperation({
+    summary:
+      "Start the School's Subscription — its first Invoice is created in the same call (admin only)",
+    description:
+      "See CONTEXT.md's Trial/Subscription entries: a School has no Subscription until it actively converts, whenever its admin chooses to (during or after the 30-day trial). Fails if a Subscription already exists — this is a one-time conversion, not idempotent.",
+  })
+  @Post('subscribe')
+  subscribe(
+    @CurrentSchoolId() schoolId: string,
+    @Body() dto: StartSubscriptionDto,
+  ): Promise<void> {
+    return this.commandBus.execute<StartSubscriptionCommand, void>(
+      new StartSubscriptionCommand(schoolId, dto.plan),
     );
   }
 
