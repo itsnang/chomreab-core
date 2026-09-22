@@ -17,6 +17,11 @@ export interface CutLuyPayment {
   qrString: string;
   referenceId: string | null;
   metadata: Record<string, unknown> | null;
+  /** ISO 8601 — CutLuy's docs put this at ~5 minutes after creation. The one
+   *  piece of a payment InitiateCutLuyCheckoutHandler needs to decide
+   *  whether a still-open Invoice's last attempt can be reused instead of
+   *  minting a new one. */
+  expiresAt: string;
 }
 
 interface CutLuyPaymentApi {
@@ -28,6 +33,7 @@ interface CutLuyPaymentApi {
   qr_string: string;
   reference_id?: string | null;
   metadata?: Record<string, unknown> | null;
+  expires_at: string;
 }
 
 /** Base for every named CutLuy failure — lets callers pattern-match on
@@ -176,6 +182,7 @@ export class CutLuyClient {
       qrString: body.qr_string,
       referenceId: body.reference_id ?? null,
       metadata: body.metadata ?? null,
+      expiresAt: body.expires_at,
     };
   }
 }

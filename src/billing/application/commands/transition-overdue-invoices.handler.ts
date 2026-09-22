@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, LessThan, Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import {
   InvoiceEntity,
   InvoiceStatus,
@@ -39,6 +40,10 @@ export class TransitionOverdueInvoicesHandler implements ICommandHandler<
   ) {}
 
   async execute(command: TransitionOverdueInvoicesCommand): Promise<void> {
+    // Deliberately cross-tenant: this is the daily cron walking every
+    // School's overdue Invoices, not a request scoped to one. See
+    // docs/adr/0010's "Deliberately cross-tenant by design" category.
+    // eslint-disable-next-line local/require-scoped-repository
     const overdueInvoices = await this.invoiceRepository.find({
       where: { status: InvoiceStatus.OPEN, dueAt: LessThan(command.now) },
     });
@@ -51,6 +56,10 @@ export class TransitionOverdueInvoicesHandler implements ICommandHandler<
     const subscriptionIds = [
       ...new Set(overdueInvoices.map((i) => i.subscriptionId)),
     ];
+    // Batched by a list of primary keys already resolved from the
+    // cross-tenant scan above — structurally moot to scope further, per
+    // docs/adr/0010's "keyed by a globally-unique primary key" category.
+    // eslint-disable-next-line local/require-scoped-repository
     const subscriptions = await this.subscriptionRepository.find({
       where: { id: In(subscriptionIds) },
     });
@@ -69,9 +78,14 @@ export class TransitionOverdueInvoicesHandler implements ICommandHandler<
       const overdueMs = command.now.getTime() - dueAt.getTime();
       const nextStatus = this.nextStatus(subscription.status, overdueMs);
       if (nextStatus && nextStatus !== subscription.status) {
-        await this.subscriptionRepository.update(subscription.id, {
-          status: nextStatus,
-        });
+        const subscriptions = new ScopedRepository(
+          this.subscriptionRepository,
+          subscription.schoolId,
+        );
+        await subscriptions.update(
+          { id: subscription.id },
+          { status: nextStatus },
+        );
       }
     }
   }

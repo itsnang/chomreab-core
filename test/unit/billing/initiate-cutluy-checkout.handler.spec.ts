@@ -21,8 +21,8 @@ import {
 
 describe('InitiateCutLuyCheckoutHandler', () => {
   let handler: InitiateCutLuyCheckoutHandler;
-  let invoiceRepo: { findOneBy: jest.Mock };
-  let cutluy: { createPayment: jest.Mock };
+  let invoiceRepo: { findOneBy: jest.Mock; update: jest.Mock };
+  let cutluy: { createPayment: jest.Mock; getPayment: jest.Mock };
 
   const OPEN_INVOICE = {
     id: 'invoice-1',
@@ -32,11 +32,14 @@ describe('InitiateCutLuyCheckoutHandler', () => {
     amountCents: 1500,
     dueAt: new Date('2026-01-01'),
     status: InvoiceStatus.OPEN,
+    pendingCutluyPaymentId: null,
+    pendingCutluyPaymentExpiresAt: null,
   };
 
   beforeEach(async () => {
     invoiceRepo = {
       findOneBy: jest.fn().mockResolvedValue({ ...OPEN_INVOICE }),
+      update: jest.fn().mockResolvedValue(undefined),
     };
     cutluy = {
       createPayment: jest.fn().mockResolvedValue({
@@ -48,7 +51,9 @@ describe('InitiateCutLuyCheckoutHandler', () => {
         qrString: '00020101021229...6304AB12',
         referenceId: 'invoice-1',
         metadata: { invoiceId: 'invoice-1', schoolId: 'school-1' },
+        expiresAt: '2026-01-01T00:05:00.000Z',
       }),
+      getPayment: jest.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -144,6 +149,83 @@ describe('InitiateCutLuyCheckoutHandler', () => {
     const result = await handler.execute(
       new InitiateCutLuyCheckoutCommand('school-1', 'invoice-1'),
     );
+    expect(result).toEqual({
+      checkoutUrl: 'https://cutluy.com/pay/PUETcMUOKStjZsCb',
+      qrString: '00020101021229...6304AB12',
+    });
+  });
+
+  it('records the pending CutLuy payment on the Invoice after creating one, for the next call to reuse', async () => {
+    await handler.execute(
+      new InitiateCutLuyCheckoutCommand('school-1', 'invoice-1'),
+    );
+    expect(invoiceRepo.update).toHaveBeenCalledWith(
+      { id: 'invoice-1', schoolId: 'school-1' },
+      {
+        pendingCutluyPaymentId: 'PUETcMUOKStjZsCb',
+        pendingCutluyPaymentExpiresAt: new Date('2026-01-01T00:05:00.000Z'),
+      },
+    );
+  });
+
+  it('reuses a still-live pending payment instead of minting a new one — the double-click / retry guard', async () => {
+    invoiceRepo.findOneBy.mockResolvedValue({
+      ...OPEN_INVOICE,
+      pendingCutluyPaymentId: 'existing-payment',
+      pendingCutluyPaymentExpiresAt: new Date(Date.now() + 60_000),
+    });
+    cutluy.getPayment.mockResolvedValue({
+      id: 'existing-payment',
+      status: 'pending',
+      amount: '15.00',
+      currency: 'USD',
+      checkoutUrl: 'https://cutluy.com/pay/existing-payment',
+      qrString: 'existing-qr-string',
+      referenceId: 'invoice-1',
+      metadata: null,
+      expiresAt: '2026-01-01T00:05:00.000Z',
+    });
+
+    const result = await handler.execute(
+      new InitiateCutLuyCheckoutCommand('school-1', 'invoice-1'),
+    );
+
+    expect(cutluy.getPayment).toHaveBeenCalledWith('existing-payment');
+    expect(cutluy.createPayment).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      checkoutUrl: 'https://cutluy.com/pay/existing-payment',
+      qrString: 'existing-qr-string',
+    });
+  });
+
+  it('mints a new payment once the pending one has expired, CutLuy having no cancel endpoint to clear it explicitly', async () => {
+    invoiceRepo.findOneBy.mockResolvedValue({
+      ...OPEN_INVOICE,
+      pendingCutluyPaymentId: 'expired-payment',
+      pendingCutluyPaymentExpiresAt: new Date(Date.now() - 1000),
+    });
+
+    await handler.execute(
+      new InitiateCutLuyCheckoutCommand('school-1', 'invoice-1'),
+    );
+
+    expect(cutluy.getPayment).not.toHaveBeenCalled();
+    expect(cutluy.createPayment).toHaveBeenCalled();
+  });
+
+  it('falls through to creating a new payment when reusing the pending one fails', async () => {
+    invoiceRepo.findOneBy.mockResolvedValue({
+      ...OPEN_INVOICE,
+      pendingCutluyPaymentId: 'gone-payment',
+      pendingCutluyPaymentExpiresAt: new Date(Date.now() + 60_000),
+    });
+    cutluy.getPayment.mockRejectedValue(new Error('not found'));
+
+    const result = await handler.execute(
+      new InitiateCutLuyCheckoutCommand('school-1', 'invoice-1'),
+    );
+
+    expect(cutluy.createPayment).toHaveBeenCalled();
     expect(result).toEqual({
       checkoutUrl: 'https://cutluy.com/pay/PUETcMUOKStjZsCb',
       qrString: '00020101021229...6304AB12',
