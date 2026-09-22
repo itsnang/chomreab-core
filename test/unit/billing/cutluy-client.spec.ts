@@ -141,6 +141,7 @@ describe('CutLuyClient', () => {
         qr_string: '00020101021229...6304AB12',
         reference_id: 'invoice-1',
         metadata: { schoolId: 'school-1' },
+        expires_at: '2026-01-01T00:05:00.000Z',
       }),
     );
     const payment = await client.createPayment({ amountCents: 150 });
@@ -153,7 +154,24 @@ describe('CutLuyClient', () => {
       qrString: '00020101021229...6304AB12',
       referenceId: 'invoice-1',
       metadata: { schoolId: 'school-1' },
+      expiresAt: '2026-01-01T00:05:00.000Z',
     });
+  });
+
+  it('maps expires_at into expiresAt', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(201, {
+        id: 'x',
+        status: 'pending',
+        amount: '1.00',
+        currency: 'USD',
+        checkout_url: 'u',
+        qr_string: 'q',
+        expires_at: '2026-06-01T12:05:00.000Z',
+      }),
+    );
+    const payment = await client.createPayment({ amountCents: 100 });
+    expect(payment.expiresAt).toBe('2026-06-01T12:05:00.000Z');
   });
 
   it('throws CutLuyUnauthorizedError on 401', async () => {

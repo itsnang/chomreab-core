@@ -36,6 +36,21 @@ export class InvoiceEntity {
   @Column({ type: 'enum', enum: InvoiceStatus })
   status: InvoiceStatus;
 
+  // The most recent live CutLuy payment attempt for this Invoice, if any —
+  // not a Payment row (payment.entity.ts is only ever a *confirmed*
+  // transfer). InitiateCutLuyCheckoutHandler reuses this instead of minting
+  // a new CutLuy payment while it's still unexpired, so a double-click on
+  // "Pay now" can't leave two live payments open for the same Invoice —
+  // CutLuy has no cancel/void endpoint, so avoiding a second one in the
+  // first place is the only real fix. Cleared implicitly by simply going
+  // stale once `pendingCutluyPaymentExpiresAt` passes; nothing needs to
+  // null these out.
+  @Column({ type: 'varchar', nullable: true })
+  pendingCutluyPaymentId: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  pendingCutluyPaymentExpiresAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }
