@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { StartSubscriptionHandler } from '../../../src/billing/application/commands/start-subscription.handler';
@@ -18,7 +19,7 @@ import {
 
 describe('StartSubscriptionHandler', () => {
   let handler: StartSubscriptionHandler;
-  let subscriptionRepo: { save: jest.Mock };
+  let subscriptionRepo: { save: jest.Mock; findOneBy: jest.Mock };
   let invoiceRepo: { save: jest.Mock };
   let studentRepo: { count: jest.Mock };
 
@@ -27,6 +28,7 @@ describe('StartSubscriptionHandler', () => {
   beforeEach(async () => {
     subscriptionRepo = {
       save: jest.fn().mockImplementation((e) => Promise.resolve(e)),
+      findOneBy: jest.fn().mockResolvedValue(null),
     };
     invoiceRepo = {
       save: jest.fn().mockImplementation((e) => Promise.resolve(e)),
@@ -140,6 +142,22 @@ describe('StartSubscriptionHandler', () => {
     const [invoice] = invoiceRepo.save.mock.calls[0] as [InvoiceEntity];
     expect(invoice.amountCents).toBe(0);
     expect(invoice.status).toBe(InvoiceStatus.PAID);
+  });
+
+  it('rejects a School that already has a Subscription — a double-click on "Subscribe now" must not create two', async () => {
+    subscriptionRepo.findOneBy.mockResolvedValue({
+      id: 'existing-sub',
+      schoolId: SCHOOL_ID,
+      status: SubscriptionStatus.ACTIVE,
+    });
+
+    await expect(
+      handler.execute(
+        new StartSubscriptionCommand(SCHOOL_ID, SubscriptionPlan.MONTHLY),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(subscriptionRepo.save).not.toHaveBeenCalled();
+    expect(invoiceRepo.save).not.toHaveBeenCalled();
   });
 
   it('dues the first Invoice immediately, not a period out', async () => {
