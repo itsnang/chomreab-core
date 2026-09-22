@@ -6,7 +6,8 @@ import {
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { isUUID } from 'class-validator';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { ScopedRepository } from '../../../shared/database/scoped-repository';
 import {
   InvoiceEntity,
   InvoiceStatus,
@@ -29,6 +30,15 @@ import { MarkInvoicePaidCommand } from './mark-invoice-paid.command';
  * that is a separate concern this phase leaves open. What it does guarantee,
  * per CONTEXT.md's "Lapsed" entry: paying the open Invoice is what reverses
  * a lapse, whatever the current status was on the way in.
+ *
+ * Everything after the initial Invoice lookup runs in one DB transaction —
+ * the Payment row, the Invoice's PAID status, and the Subscription's
+ * reactivation either all commit or none do. Without this, a crash between
+ * any two of those writes (or the missing-Subscription branch below) could
+ * leave a Payment recorded against an Invoice that's still OPEN, or an
+ * Invoice marked PAID with its Subscription never reactivated — both
+ * silently wrong. This is the first use of `DataSource.transaction` in this
+ * codebase; nothing before this module needed one.
  */
 @Injectable()
 @CommandHandler(MarkInvoicePaidCommand)
@@ -39,10 +49,7 @@ export class MarkInvoicePaidHandler implements ICommandHandler<
   constructor(
     @InjectRepository(InvoiceEntity)
     private readonly invoiceRepository: Repository<InvoiceEntity>,
-    @InjectRepository(PaymentEntity)
-    private readonly paymentRepository: Repository<PaymentEntity>,
-    @InjectRepository(SubscriptionEntity)
-    private readonly subscriptionRepository: Repository<SubscriptionEntity>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async execute(command: MarkInvoicePaidCommand): Promise<void> {
@@ -57,6 +64,10 @@ export class MarkInvoicePaidHandler implements ICommandHandler<
       throw new BadRequestException('Invoice is not open for payment');
     }
 
+    // Unscoped by necessity, not oversight — schoolId isn't known until this
+    // lookup resolves it, the same shape as verify-email.handler.ts. See
+    // docs/adr/0010's "Lookups before a School is known" category.
+    // eslint-disable-next-line local/require-scoped-repository
     const invoice = await this.invoiceRepository.findOneBy({
       id: command.invoiceId,
     });
@@ -66,37 +77,52 @@ export class MarkInvoicePaidHandler implements ICommandHandler<
 
     const confirmedAt = new Date();
 
-    await this.paymentRepository.save({
-      id: crypto.randomUUID(),
-      invoiceId: invoice.id,
-      schoolId: invoice.schoolId,
-      cutluyReference: command.cutluyReference,
-      amountCents: invoice.amountCents,
-      rawWebhookPayload: command.rawWebhookPayload,
-      confirmedAt,
-    });
-
-    await this.invoiceRepository.update(invoice.id, {
-      status: InvoiceStatus.PAID,
-    });
-
-    // Every Invoice is created alongside the Subscription it belongs to
-    // (StartSubscriptionHandler, GenerateRenewalInvoicesHandler) — a missing
-    // row here means the data is inconsistent, not that this is a normal
-    // state to shrug off. Throwing surfaces that loudly instead of silently
-    // leaving the Invoice paid but its Subscription never reactivated.
-    const subscription = await this.subscriptionRepository.findOneBy({
-      id: invoice.subscriptionId,
-    });
-    if (!subscription) {
-      throw new InternalServerErrorException(
-        `Invoice ${invoice.id} references Subscription ${invoice.subscriptionId}, which does not exist`,
+    await this.dataSource.transaction(async (manager) => {
+      const invoices = new ScopedRepository(
+        manager.getRepository(InvoiceEntity),
+        invoice.schoolId,
       );
-    }
-    if (subscription.status !== SubscriptionStatus.ACTIVE) {
-      await this.subscriptionRepository.update(subscription.id, {
-        status: SubscriptionStatus.ACTIVE,
+      const payments = new ScopedRepository(
+        manager.getRepository(PaymentEntity),
+        invoice.schoolId,
+      );
+      const subscriptions = new ScopedRepository(
+        manager.getRepository(SubscriptionEntity),
+        invoice.schoolId,
+      );
+
+      await payments.save({
+        id: crypto.randomUUID(),
+        invoiceId: invoice.id,
+        cutluyReference: command.cutluyReference,
+        amountCents: invoice.amountCents,
+        rawWebhookPayload: command.rawWebhookPayload,
+        confirmedAt,
       });
-    }
+
+      await invoices.update({ id: invoice.id }, { status: InvoiceStatus.PAID });
+
+      // Every Invoice is created alongside the Subscription it belongs to
+      // (StartSubscriptionHandler, GenerateRenewalInvoicesHandler) — a
+      // missing row here means the data is inconsistent, not that this is a
+      // normal state to shrug off. Throwing rolls back the Payment and
+      // Invoice writes above along with it: better an Invoice that's still
+      // cleanly OPEN (retryable — CutLuy redelivers, or an ops action can
+      // retry) than a Payment recorded against a broken Subscription link.
+      const subscription = await subscriptions.findOneBy({
+        id: invoice.subscriptionId,
+      });
+      if (!subscription) {
+        throw new InternalServerErrorException(
+          `Invoice ${invoice.id} references Subscription ${invoice.subscriptionId}, which does not exist`,
+        );
+      }
+      if (subscription.status !== SubscriptionStatus.ACTIVE) {
+        await subscriptions.update(
+          { id: subscription.id },
+          { status: SubscriptionStatus.ACTIVE },
+        );
+      }
+    });
   }
 }

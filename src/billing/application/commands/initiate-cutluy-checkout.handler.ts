@@ -60,11 +60,17 @@ export class InitiateCutLuyCheckoutHandler implements ICommandHandler<
       throw new BadRequestException('Invoice is not open for payment');
     }
 
+    const reused = await this.reuseLivePayment(invoice);
+    if (reused) return reused;
+
     // A fresh key per attempt, not a fixed one derived from the Invoice —
     // see the test file for why: CONTEXT.md's Invoice entry expects more
     // than one payment attempt per Invoice, and reusing invoice.id forever
     // would make CutLuy treat a real second attempt as a duplicate of an
-    // expired first one.
+    // expired first one. `reuseLivePayment` above is the actual guard
+    // against a double-click minting two *simultaneously live* payments —
+    // this key just keeps each genuinely new attempt distinct from the
+    // last.
     try {
       const payment = await this.cutluy.createPayment({
         amountCents: invoice.amountCents,
@@ -72,9 +78,54 @@ export class InitiateCutLuyCheckoutHandler implements ICommandHandler<
         metadata: { invoiceId: invoice.id, schoolId: invoice.schoolId },
         idempotencyKey: randomUUID(),
       });
+      // CutLuy has no cancel/void endpoint, and a payment self-expires in
+      // ~5 minutes (docs), so "avoid a second live payment in the first
+      // place" is the only fix available — recording this one is what lets
+      // the check above catch a retry or a double-click before it happens.
+      await invoices.update(
+        { id: invoice.id },
+        {
+          pendingCutluyPaymentId: payment.id,
+          pendingCutluyPaymentExpiresAt: new Date(payment.expiresAt),
+        },
+      );
       return { checkoutUrl: payment.checkoutUrl, qrString: payment.qrString };
     } catch (error) {
       throw this.translateCutLuyError(error, invoice.id);
+    }
+  }
+
+  /**
+   * If this Invoice already has a CutLuy payment that hasn't expired yet,
+   * re-reads it and returns its checkout details instead of minting a new
+   * one — the fix for a double-click or a retried request otherwise leaving
+   * two live payments open for the same Invoice, with no CutLuy endpoint to
+   * cancel either. Purely an optimization: any failure reading the existing
+   * payment (CutLuy briefly unreachable, the row somehow purged on their
+   * side) just falls through to creating a fresh one below, since that path
+   * always works and this one only ever saves an API call.
+   */
+  private async reuseLivePayment(
+    invoice: InvoiceEntity,
+  ): Promise<CutLuyCheckout | null> {
+    if (
+      !invoice.pendingCutluyPaymentId ||
+      !invoice.pendingCutluyPaymentExpiresAt ||
+      invoice.pendingCutluyPaymentExpiresAt.getTime() <= Date.now()
+    ) {
+      return null;
+    }
+
+    try {
+      const existing = await this.cutluy.getPayment(
+        invoice.pendingCutluyPaymentId,
+      );
+      return { checkoutUrl: existing.checkoutUrl, qrString: existing.qrString };
+    } catch (error) {
+      this.logger.warn(
+        `Couldn't reuse pending CutLuy payment ${invoice.pendingCutluyPaymentId} for invoice ${invoice.id}, creating a new one instead: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
     }
   }
 

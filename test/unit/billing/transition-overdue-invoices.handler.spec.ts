@@ -59,14 +59,15 @@ describe('TransitionOverdueInvoicesHandler', () => {
       },
     ]);
     subscriptionRepo.find.mockResolvedValue([
-      { id: 'sub-1', status: SubscriptionStatus.ACTIVE },
+      { id: 'sub-1', schoolId: 'school-1', status: SubscriptionStatus.ACTIVE },
     ]);
 
     await handler.execute(new TransitionOverdueInvoicesCommand(NOW));
 
-    expect(subscriptionRepo.update).toHaveBeenCalledWith('sub-1', {
-      status: SubscriptionStatus.IN_GRACE,
-    });
+    expect(subscriptionRepo.update).toHaveBeenCalledWith(
+      { id: 'sub-1', schoolId: 'school-1' },
+      { status: SubscriptionStatus.IN_GRACE },
+    );
   });
 
   it('lapses an active Subscription directly when the cron missed enough runs to skip past grace entirely', async () => {
@@ -82,14 +83,15 @@ describe('TransitionOverdueInvoicesHandler', () => {
       },
     ]);
     subscriptionRepo.find.mockResolvedValue([
-      { id: 'sub-1', status: SubscriptionStatus.ACTIVE },
+      { id: 'sub-1', schoolId: 'school-1', status: SubscriptionStatus.ACTIVE },
     ]);
 
     await handler.execute(new TransitionOverdueInvoicesCommand(NOW));
 
-    expect(subscriptionRepo.update).toHaveBeenCalledWith('sub-1', {
-      status: SubscriptionStatus.LAPSED,
-    });
+    expect(subscriptionRepo.update).toHaveBeenCalledWith(
+      { id: 'sub-1', schoolId: 'school-1' },
+      { status: SubscriptionStatus.LAPSED },
+    );
     expect(subscriptionRepo.update).toHaveBeenCalledTimes(1);
   });
 
@@ -103,7 +105,11 @@ describe('TransitionOverdueInvoicesHandler', () => {
       },
     ]);
     subscriptionRepo.find.mockResolvedValue([
-      { id: 'sub-1', status: SubscriptionStatus.IN_GRACE },
+      {
+        id: 'sub-1',
+        schoolId: 'school-1',
+        status: SubscriptionStatus.IN_GRACE,
+      },
     ]);
 
     await handler.execute(new TransitionOverdueInvoicesCommand(NOW));
@@ -121,14 +127,19 @@ describe('TransitionOverdueInvoicesHandler', () => {
       },
     ]);
     subscriptionRepo.find.mockResolvedValue([
-      { id: 'sub-1', status: SubscriptionStatus.IN_GRACE },
+      {
+        id: 'sub-1',
+        schoolId: 'school-1',
+        status: SubscriptionStatus.IN_GRACE,
+      },
     ]);
 
     await handler.execute(new TransitionOverdueInvoicesCommand(NOW));
 
-    expect(subscriptionRepo.update).toHaveBeenCalledWith('sub-1', {
-      status: SubscriptionStatus.LAPSED,
-    });
+    expect(subscriptionRepo.update).toHaveBeenCalledWith(
+      { id: 'sub-1', schoolId: 'school-1' },
+      { status: SubscriptionStatus.LAPSED },
+    );
   });
 
   it('does nothing to a Subscription that has already lapsed', async () => {
@@ -141,7 +152,7 @@ describe('TransitionOverdueInvoicesHandler', () => {
       },
     ]);
     subscriptionRepo.find.mockResolvedValue([
-      { id: 'sub-1', status: SubscriptionStatus.LAPSED },
+      { id: 'sub-1', schoolId: 'school-1', status: SubscriptionStatus.LAPSED },
     ]);
 
     await handler.execute(new TransitionOverdueInvoicesCommand(NOW));
@@ -165,18 +176,24 @@ describe('TransitionOverdueInvoicesHandler', () => {
       },
     ]);
     subscriptionRepo.find.mockResolvedValue([
-      { id: 'sub-1', status: SubscriptionStatus.ACTIVE },
-      { id: 'sub-2', status: SubscriptionStatus.IN_GRACE },
+      { id: 'sub-1', schoolId: 'school-1', status: SubscriptionStatus.ACTIVE },
+      {
+        id: 'sub-2',
+        schoolId: 'school-2',
+        status: SubscriptionStatus.IN_GRACE,
+      },
     ]);
 
     await handler.execute(new TransitionOverdueInvoicesCommand(NOW));
 
-    expect(subscriptionRepo.update).toHaveBeenCalledWith('sub-1', {
-      status: SubscriptionStatus.IN_GRACE,
-    });
-    expect(subscriptionRepo.update).toHaveBeenCalledWith('sub-2', {
-      status: SubscriptionStatus.LAPSED,
-    });
+    expect(subscriptionRepo.update).toHaveBeenCalledWith(
+      { id: 'sub-1', schoolId: 'school-1' },
+      { status: SubscriptionStatus.IN_GRACE },
+    );
+    expect(subscriptionRepo.update).toHaveBeenCalledWith(
+      { id: 'sub-2', schoolId: 'school-2' },
+      { status: SubscriptionStatus.LAPSED },
+    );
     expect(subscriptionRepo.update).toHaveBeenCalledTimes(2);
   });
 });

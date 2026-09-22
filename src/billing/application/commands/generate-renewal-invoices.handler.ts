@@ -47,6 +47,10 @@ export class GenerateRenewalInvoicesHandler implements ICommandHandler<
   ) {}
 
   async execute(command: GenerateRenewalInvoicesCommand): Promise<void> {
+    // Deliberately cross-tenant: this is the daily cron scanning every
+    // School for a due renewal, not a request scoped to one. See
+    // docs/adr/0010's "Deliberately cross-tenant by design" category.
+    // eslint-disable-next-line local/require-scoped-repository
     const dueSubscriptions = await this.subscriptionRepository.find({
       where: {
         status: SubscriptionStatus.ACTIVE,
@@ -83,10 +87,17 @@ export class GenerateRenewalInvoicesHandler implements ICommandHandler<
         subscription.currentPeriodEnd.getTime() +
           periodDays * 24 * 60 * 60 * 1000,
       );
-      await this.subscriptionRepository.update(subscription.id, {
-        currentPeriodStart: subscription.currentPeriodEnd,
-        currentPeriodEnd,
-      });
+      const subscriptions = new ScopedRepository(
+        this.subscriptionRepository,
+        subscription.schoolId,
+      );
+      await subscriptions.update(
+        { id: subscription.id },
+        {
+          currentPeriodStart: subscription.currentPeriodEnd,
+          currentPeriodEnd,
+        },
+      );
     }
   }
 }
